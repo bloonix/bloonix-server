@@ -1,0 +1,29 @@
+bloonix-server (0.6) released at 2014-11-08
+
+    * Fixed that volatile states will be hold until an administrator
+      marks the status as viewed.
+
+bloonix-server (0.5) released at 2014-11-06
+
+    * Moved bloonix-plugin-loader and Plugin/Loader.pm
+      to package bloonix-plugin-config.
+
+bloonix-server (0.4) released at 2014-11-04
+
+    * Fixed: rename the host id from id to host_id.
+
+bloonix-server (0.3) released at 2014-11-01
+
+    * Feature force_check for services implemented.
+    * Skipping inactive companies in script
+      bloonix-update-agent-host-config.
+    * Updated the license information.
+
+bloonix-server (0.2) released at 2014-10-24
+
+    * Disable die_on_errors by default so that the logger
+      does not die on errors.
+
+bloonix-server (0.1) released at 2014-08-25
+
+    * Initial public release.

@@ -1,0 +1,13 @@
+Source: bloonix-server
+Section: net
+Priority: extra
+Maintainer: Jonny Schulz <js@bloonix.de>
+Build-Depends: debhelper (>= 8)
+Standards-Version: 3.9.3
+Homepage: http://www.bloonix.de/
+
+Package: bloonix-server
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, bloonix-agent, bloonix-core, bloonix-dbi, bloonix-fcgi, libdbi-perl, libdbd-pg-perl, libgetopt-long-descriptive-perl, libmath-bigint-perl, libmime-lite-perl, liburi-perl, libtime-modules-perl, libjson-perl, libjson-xs-perl, liblog-handler-perl, libparams-validate-perl, postfix
+Description: Bloonix server daemon
+ bloonix-server provides the bloonix server.

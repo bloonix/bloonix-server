@@ -1,0 +1,85 @@
+#!@@PERL@@
+use strict;
+use warnings;
+use Bloonix::Config;
+use Bloonix::REST;
+use Data::Dumper;
+use Getopt::Long;
+use DBI;
+
+my $config_file = "@@CONFDIR@@/bloonix/server/main.conf";
+my $config = Bloonix::Config->parse($config_file);
+my $dbconf = $config->{database};
+my $index = $ARGV[0];
+my $type = $ARGV[1] || "stats";
+
+if (!$index) {
+    my @time = (localtime(time))[reverse 0..5];
+    $index = sprintf "bloonix-%04d-%02d", $time[0] + 1900, $time[1] + 1;
+}
+
+my $rest = Bloonix::REST->new(%{$config->{elasticsearch}});
+
+my $dbh = DBI->connect(
+    "DBI:$dbconf->{driver}:database=$dbconf->{database};host=$dbconf->{host};port=$dbconf->{port}",
+    $dbconf->{user},
+    $dbconf->{password},
+    { RaiseError => 1 },
+);
+
+$dbh->{pg_enable_utf8} = 1;
+binmode STDOUT, ":utf8";
+
+my $sth = $dbh->prepare("
+select      service.*, host.hostname, host.ipaddr, company.company
+from        service
+inner join  host on service.host_id = host.id
+inner join  company on host.company_id = company.id
+order by    company.id, host.id, service.id
+");
+
+$sth->execute;
+
+my $total_docs = 0;
+my $service_count = 0;
+
+while (my $row = $sth->fetchrow_hashref) {
+    my $res = $rest->get(
+        path => "$index/$type/_search",
+        data => {
+            from => 0,
+            size => 0,
+            filter => {
+                and => [
+                    { term => { service_id => $row->{id} } }
+                ]
+            }
+        }
+    );
+
+    if ($res->{hits}->{total}) {
+        printf "%-30s  %-40s  %-30s  %6s  %8s\n",
+            &substring($row->{company}, 30),
+            &substring($row->{hostname}, 40),
+            &substring($row->{plugin}, 30),
+            $row->{id},
+            $res->{hits}->{total};
+
+        $total_docs += $res->{hits}->{total};
+        $service_count += 1;
+    }
+}
+
+print "\nTotal documents: $total_docs\n";
+print "Total services: $service_count\n";
+
+$sth->finish;
+$dbh->disconnect;
+
+sub substring {
+    my ($str, $len) = @_;
+    if (length $str > $len) {
+        return substr($str, 0, $len - 3) . "...";
+    }
+    return $str;
+}

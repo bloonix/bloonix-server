@@ -1,0 +1,369 @@
+#!@@PERL@@
+use strict;
+use warnings;
+use Getopt::Long qw(:config no_ignore_case);
+use DBI;
+use Fcntl qw(:flock);
+use Log::Handler;
+use Bloonix::Config;
+use Bloonix::SQL::Creator;
+use base qw(Bloonix::Accessor);
+
+__PACKAGE__->mk_accessors(qw/config log sql/);
+
+main->run();
+
+sub run {
+    my $class = shift;
+    my $self  = bless { }, $class;
+
+    $self->init;
+    $self->get_hosts;
+
+    eval {
+        local $SIG{ALRM} = sub { die "timed out" };
+        local $SIG{__DIE__} = sub { alarm(0) };
+        alarm(15);
+        $self->update_hosts;
+        alarm(0);
+    };
+
+    if ($@) {
+        die $@;
+    }
+
+    $self->remove_pidfile;
+    $self->log->notice("finished");
+}
+
+sub init {
+    my $self = shift;
+
+    $self->get_argv;
+    $self->get_config;
+    $self->create_pidfile;
+    $self->load_logger;
+    $self->sql(
+        Bloonix::SQL::Creator->new(
+            $self->config->{database}
+        )
+    );
+}
+
+sub get_argv {
+    my $self = shift;
+
+    my $progname = do { $0 =~ m!([^/]+)\z!; $1 };
+    my $o_config = "@@CONFDIR@@/bloonix/server/main.conf";
+    my $o_agent_id = "localhost";
+    my $o_run = 0;
+    my $o_addr = 0;
+    my $o_help = 0;
+
+    GetOptions(
+        "c|config=s" => \$o_config,
+        "r|run" => \$o_run,
+        "h|help" => \$o_help,
+        "a|addr=s" => \$o_addr,
+        "A|agent-id=s" => \$o_agent_id
+    ) or exit 1;
+
+    if ($o_help || !$o_run) {
+        print "\n";
+        print "Usage: $progname [ OPTIONS ]\n\n";
+        print "Options:\n\n";
+        print "-c, --config <file>\n";
+        print "    The configruation file.\n";
+        print "    Default: /etc/bloonix/server/main.conf\n";
+        print "-r, --run\n";
+        print "    Update the configuration.\n";
+        print "-a, --addr <ipaddr>\n";
+        print "    The address of the bloonix agent. Set 'localhost'\n";
+        print "    if the agent runs on the same machine as the bloonix server.\n";
+        print "-A, --agent-id <localhost|intranet|remote>\n";
+        print "    The agent ID to load.\n";
+        print "-h, --help\n";
+        print "    Print the help.\n";
+        print "\n";
+        exit 0;
+    }
+
+    if (!$o_config || !-r $o_config) {
+        print "Missing or invalid configuration file\n";
+        exit 1;
+    }
+
+    if (!$o_addr) {
+        print "Missing mandatory parameter --addr\n";
+        exit 1;
+    }
+
+    $self->{config_file} = $o_config;
+    $self->{addr} = $o_addr;
+    $self->{agent_id} = $o_agent_id;
+}
+
+sub get_config {
+    my $self = shift;
+
+    my $config = Bloonix::Config->parse($self->{config_file});
+
+    $self->config({ });
+    $self->config->{database} = $config->{database};
+    $self->config->{pidfile}  = "/var/run/bloonix/bloonix-update-agent-host-config.pid";
+    $self->config->{timeout}  = 10;
+}
+
+sub load_logger {
+    my $self = shift;
+
+    $self->{log} = Log::Handler->new(
+        screen => {
+            maxlevel => "info",
+            timeformat => "%b %d %Y %H:%M:%S",
+            message_layout => "[%T] %L %P %t %m (%C)",
+        }
+    );
+
+    $SIG{__DIE__} = sub { $self->{log}->error(@_) };
+}
+
+sub create_pidfile {
+    my $self = shift;
+    my $file = $self->config->{pidfile};
+
+    open my $fhpid, ">", $file
+        or die "unable to open pid file $file";
+
+    eval {
+        local $SIG{ALRM} = sub { die "timed out" };
+        local $SIG{__DIE__} = sub { alarm(0) };
+        alarm(10);
+        flock($fhpid, LOCK_EX);
+        alarm(0);
+    };
+
+    if ($@) {
+        die $@;
+    }
+
+    $self->{fhpid} = $fhpid;
+}
+
+sub remove_pidfile {
+    my $self = shift;
+    # Just close it.
+    close $self->{fhpid}
+}
+
+sub connect_database {
+    my $self = shift;
+    my $config = $self->config->{database};
+
+    $self->log->notice(
+        "connect to database $config->{database}",
+        "at $config->{host}:$config->{port}",
+        "as $config->{user}",
+    );
+
+    $self->{dbh} = DBI->connect(
+        join(";",
+            "DBI:$config->{driver}:database=$config->{database}",
+            "host=$config->{host}",
+            "port=$config->{port}",
+        ),
+        $config->{user},
+        $config->{password},
+        { RaiseError => 1 },
+    );
+
+    return $self->{dbh};
+}
+
+sub disconnect_database {
+    my $self = shift;
+    my $dbh  = $self->{dbh};
+
+    $self->log->notice("disconnect from database");
+    $dbh->disconnect;
+}
+
+sub get_hosts {
+    my $self = shift;
+    my $dbh  = $self->connect_database;
+
+    my ($stmt, @bind) = $self->sql->select(
+        table => [
+            host => "*",
+            host_secret => "*"
+        ],
+        join => [
+            inner => {
+                table => "host_secret",
+                left  => "host.id",
+                right => "host_secret.host_id",
+            },
+            inner => {
+                table => "company",
+                left  => "host.company_id",
+                right => "company.id",
+            }
+        ],
+        condition => [
+            where => {
+                table => "company",
+                column => "active",
+                value => 1
+            }
+        ],
+        order => [
+            asc => "host.id",
+        ],
+    );
+
+    my $sth = $dbh->prepare($stmt);
+    $sth->execute(@bind);
+
+    while (my $host = $sth->fetchrow_hashref) {
+        my $ip = $host->{ipaddr};
+        $ip =~ s/^\s+//;
+        $ip =~ s/\s+\z//;
+
+        if ($self->{ignore}->{$ip}) {
+            $self->log->info(
+                "skip host id $host->{id} address $host->{ipaddr}",
+                "- this is a bloonix server ip address",
+            );
+            next;
+        }
+
+        my ($stmt, @bind) = $self->sql->select(
+            table => [
+                service => "*",
+                service_parameter => "*"
+            ],
+            join => [
+                inner => {
+                    table => "service_parameter",
+                    left => "service.service_parameter_id",
+                    right => "service_parameter.ref_id"
+                }
+            ],
+            condition => [
+                where => {
+                    table  => "service",
+                    column => "host_id",
+                    value  => $host->{id},
+                },
+                and => {
+                    table  => "service_parameter",
+                    column => "agent_id",
+                    value  => $self->{agent_id}
+                }
+            ],
+        );
+
+        my $sth2 = $dbh->prepare($stmt);
+        $sth2->execute(@bind);
+
+        while (my $row = $sth2->fetchrow_hashref) {
+            my $agent_id = $row->{agent_id};
+            my $host_id  = $host->{id};
+
+            if (!defined $self->{hosts}->{$host_id}) {
+                $self->log->notice("found host id $host_id");
+                $self->{hosts}->{$host_id} = $host;
+            }
+        }
+
+        $sth2->finish;
+    }
+
+    $sth->finish;
+    $self->disconnect_database;
+}
+
+sub update_hosts {
+    my $self = shift;
+    my $ipaddr = $self->{addr};
+
+    open my $fh, ">", "/var/tmp/bloonix-agent-hosts.conf" or die $!;
+
+    foreach my $host_id (keys %{$self->{hosts}}) {
+        my $host = $self->{hosts}->{$host_id};
+        $host->{active} = $host->{active} ? "yes" : "no";
+
+        print $fh join("",
+            "host {\n",
+            "    host_id  $host->{id}\n",
+            "    password $host->{password}\n",
+            "    agent_id $self->{agent_id}\n",
+            "}\n",
+        );
+    }
+
+    close $fh;
+
+    $self->log->notice("rewrite hosts config");
+
+    if ($ipaddr =~ /^(localhost|127.0.0.1)\z/) {
+        system("mv /var/tmp/bloonix-agent-hosts.conf /etc/bloonix/agent/hosts.conf");
+        system("/etc/init.d/bloonix-agent reload");
+        return;
+    }
+
+    require Net::OpenSSH;
+
+    $self->{ssh} = Net::OpenSSH->new(
+        "root\@$ipaddr",
+        master_opts => [ "-o" => "BatchMode yes", "-o", "StrictHostKeyChecking=no" ],
+        master_stderr_discard => 1,
+        strict_mode => 0,
+    );
+
+    if ($self->{ssh}->error) {
+        $self->log->error("unable to connect to $ipaddr via ssh");
+        exit 0;
+    }
+
+    $self->sshexec(
+        "scp_put",
+        "/var/tmp/bloonix-agent-hosts.conf",
+        "/etc/bloonix/agent/hosts.temp",
+    ) or die "unable to put host config";
+
+    $self->sshexec(
+        "system",
+        "chmod 640 /etc/bloonix/agent/hosts.temp"
+    ) or die "unable to chmod host config";
+
+    $self->sshexec(
+        "system",
+        "chown bloonix:bloonix /etc/bloonix/agent/hosts.temp"
+    ) or die "unable to chown host config";
+
+    $self->sshexec(
+        "system",
+        "mv /etc/bloonix/agent/hosts.temp /etc/bloonix/agent/hosts.conf"
+    ) or die "unable to move host config";
+
+    $self->sshexec(
+        "system",
+        "/etc/init.d/bloonix-agent reload"
+    ) or die "unable to reload agent";
+}
+
+sub sshexec {
+    my ($self, $exec, @cmd) = @_;
+    my $ssh = $self->{ssh};
+
+    $ssh->$exec(@cmd);
+
+    if ($ssh->error) {
+        $self->log->error("unable to execute command ($exec):", @cmd);
+        return 0;
+    }
+
+    return 1;
+}
+

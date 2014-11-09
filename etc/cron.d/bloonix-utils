@@ -1,0 +1,3 @@
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/lib/bloonix/utils
+MAILTO="root@localhost"
+* * * * * root bloonix-update-agent-host-config --addr localhost --agent-id intranet --run 1>/var/log/bloonix/bloonix-update-agent-host-config.log

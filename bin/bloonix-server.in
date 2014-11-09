@@ -1,0 +1,81 @@
+#!@@PERL@@
+
+=head1 NAME
+
+bloonix-server - Main script to start the bloonix server.
+
+=head1 SYNOPSIS
+
+    bloonix-server
+
+=head1 REPORTING BUGS
+
+Please report all bugs to <support(at)bloonix.de>.
+
+=head1 AUTHOR
+
+Jonny Schulz <support(at)bloonix.de>.
+
+=head1 POWERED BY
+
+     _    __ _____ _____ __  __ __ __   __
+    | |__|  |     |     |  \|  |__|\  \/  /
+    |  . |  |  |  |  |  |      |  | >    <
+    |____|__|_____|_____|__|\__|__|/__/\__\
+
+=head1 COPYRIGHT
+
+Copyright (C) 2009-2014 by Jonny Schulz. All rights reserved.
+
+=cut
+
+use strict;
+use warnings;
+use Bloonix::Server;
+use Getopt::Long qw(:config no_ignore_case);
+
+my %options = ();
+my $config = "@@CONFDIR@@/bloonix/server/main.conf";
+my $pidfile = "@@RUNDIR@@/bloonix/bloonix-server.pid";
+my $version = undef;
+my $help = undef;
+
+GetOptions(
+    "c|config-file=s" => \$config,
+    "p|pid-file=s" => \$pidfile,
+    "h|help" => \$help,
+    "v|version" => \$version,
+) or exit 1;
+
+if ($help) {
+    print "Usage: bloonix-server [ options ]\n";
+    print "-c, --config-file <config>\n";
+    print "    The configuration file.\n";
+    print "    Default: @@CONFDIR@@/bloonix/server/main.conf\n";
+    print "-p, --pid-file <file>\n";
+    print "    Where to store the daemon pid.\n";
+    print "    Default: @@RUNDIR@@/bloonix/bloonix-server.pid\n";
+    print "-v, --version\n";
+    print "    Print the version number.\n";
+    print "-h, --help\n";
+    print "    Print the help.\n";
+    exit 0;
+}
+
+if ($version) {
+    my $v = $Bloonix::Server::VERSION;
+    print "Bloonix server v$v\n";
+    exit 0;
+}
+
+if ($config) {
+    $options{config_file} = $config;
+}
+
+if ($pidfile) {
+    $options{pid_file} = $pidfile;
+}
+
+Bloonix::Server->run(\%options);
+
+exit 0;

@@ -1,0 +1,85 @@
+#!@@PERL@@
+use strict;
+use warnings;
+use Bloonix::Config;
+use Bloonix::REST;
+use IO::Handle;
+use JSON;
+
+my $id = qx{id};
+if ($id !~ /bloonix/) {
+    print "Please run this script as user bloonix!\n";
+    exit 1;
+}
+
+$SIG{HUP} = $SIG{INT} = $SIG{TERM} = "IGNORE";
+
+my $i = 0;
+my $json = JSON->new;
+my $config_file = "@@CONFDIR@@/bloonix/server/main.conf";
+my $config = Bloonix::Config->parse($config_file);
+my $rest = Bloonix::REST->new(%{$config->{elasticsearch}});
+my $trlog = $config->{elasticsearch_roll_forward} || "/var/log/bloonix/elasticsearch-roll-forward.json";
+
+if (!-e $trlog) {
+    print "no transaction log found\n";
+    exit 0;
+}
+
+if (-e "$trlog.import.count" && -e "$trlog.import") {
+    open my $fh, "<", "$trlog.import.count" or die $!;
+    $i = do { local $/; <$fh> };
+    close $fh;
+} else {
+    system("mv $trlog $trlog.import");
+}
+
+sleep 5;
+
+open my $out, ">>", $trlog or die $!;
+open my $cnt, ">", "$trlog.import.count" or die $!;
+open my $in, "<", "$trlog.import" or die $!;
+
+$out->autoflush(1);
+$cnt->autoflush(1);
+
+if ($i) {
+    my $x = 0;
+    while (<$in>) { last if ++$x == $i }
+}
+
+while (my $line = <$in>) {
+    $i++; print "processing line $i\r";
+    print $i, "\r";
+    my $req = $json->decode($line);
+    &typecast($req->{data});
+    if (!$rest->post(%$req)) {
+        print $out $line;
+        $out->sync;
+    }
+    seek($cnt, 0, 0);
+    print $cnt $i;
+    $cnt->sync;
+}
+
+print "\n";
+close $in;
+close $out;
+close $cnt;
+
+unlink "$trlog.import.count";
+unlink "$trlog.import";
+
+sub typecast {
+    my $data = shift;
+
+    if (ref $data eq "HASH") {
+        foreach my $key (keys %$data) {
+            if (ref $data->{$key} eq "HASH") {
+                &typecast($data->{$key});
+            } elsif ($data->{$key} =~ /^\d+(\.\d+){0,1}\z/) {
+                $data->{$key} += 0;
+            }
+        }
+    }
+}

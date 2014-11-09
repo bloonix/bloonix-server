@@ -1,0 +1,21 @@
+#! /bin/sh
+
+# Red Hat style
+# chkconfig: 2345 99 10
+# description: bloonix service checker
+
+# Debian style
+### BEGIN INIT INFO
+# Provides:          bloonix-srvchk
+# Required-Start:    $network
+# Required-Stop:     $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start and stop the bloonix-srvchk daemon.
+# Description:       bloonix-srvchk is a program that check services
+#                    that runs on a timeout.
+### END INIT INFO
+
+. @@USRLIBDIR@@/bloonix/bin/bloonix-init-source
+CHECK_DIRS="$CACHEDIR $LOGDIR $RUNDIR"
+__run

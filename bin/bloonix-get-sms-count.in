@@ -1,0 +1,99 @@
+#!@@PERL@@
+
+=head1 NAME
+
+bloonix-get-sms-count - Count the number of SMS that was sent by each company.
+
+=head1 SYNOPSIS
+
+    bloonix-get-sms-count
+
+=head1 REPORTING BUGS
+
+Please report all bugs to <support(at)bloonix.de>.
+
+=head1 AUTHOR
+
+Jonny Schulz <support(at)bloonix.de>.
+
+=head1 POWERED BY
+
+     _    __ _____ _____ __  __ __ __   __
+    | |__|  |     |     |  \|  |__|\  \/  /
+    |  . |  |  |  |  |  |      |  | >    <
+    |____|__|_____|_____|__|\__|__|/__/\__\
+
+=head1 COPYRIGHT
+
+Copyright (C) 2009-2014 by Jonny Schulz. All rights reserved.
+
+=cut
+
+use strict;
+use warnings;
+use Bloonix::Config;
+use Time::ParseDate;
+use DBI;
+
+my $config = Bloonix::Config->parse("@@CONFDIR@@/bloonix/server/main.conf");
+my $dbconf = $config->{database};
+my $from = shift @ARGV;
+my $to = shift @ARGV;
+my @customer = @ARGV;
+
+foreach my $p ($from, $to) {
+    if (!$p || $p !~ /^\d\d\d\d-\d\d-\d\d\z/) {
+        print "Invalid from/to format!\n";
+        exit 0;
+    }
+}
+
+$from = Time::ParseDate::parsedate("$from 00:00:00");
+$to   = Time::ParseDate::parsedate("$to 00:00:00");
+
+my $dbh = DBI->connect(
+    "DBI:$dbconf->{driver}:database=$dbconf->{database};host=$dbconf->{host};port=$dbconf->{port}",
+    $dbconf->{user},
+    $dbconf->{password},
+    { RaiseError => 1 },
+);
+
+my $sth1;
+
+if (@customer) {
+    my (@id, @qm);
+
+    foreach my $id (@customer) {
+        if ($id =~ /^\d+\z/) {
+            push @id, $id;
+            push @qm, "?";
+        }
+    }
+
+    $sth1 = $dbh->prepare('select * from company where alt_company_id in ('.join(",", @qm).')');
+    $sth1->execute(@id);
+} else {
+    $sth1 = $dbh->prepare('select * from company');
+    $sth1->execute;
+}
+
+my $sth2 = $dbh->prepare(
+    join(" ",
+        'select count(*)',
+        'from sms_send',
+        'inner join host on sms_send.host_id = host.id',
+        'where host.company_id = ?',
+        'and sms_send.time >= ?',
+        'and sms_send.time <= ?',
+    )
+);
+
+while (my $row = $sth1->fetchrow_hashref) {
+    $sth2->execute($row->{id}, $from, $to);
+    my $count = $sth2->fetchrow_hashref->{count};
+    print "$row->{id};$row->{alt_company_id};$count\n";
+}
+
+$sth1->finish;
+$sth2->finish;
+$dbh->disconnect;

@@ -1,0 +1,261 @@
+#!@@PERL@@
+use strict;
+use warnings;
+use DBI;
+use JSON;
+use Log::Handler;
+use Bloonix::REST;
+use Bloonix::Config;
+use base qw(Bloonix::Accessor);
+
+__PACKAGE__->mk_accessors(qw/sla rest json log dbh/);
+__PACKAGE__->run();
+
+sub run {
+    my $class = shift;
+    my $self = bless { }, $class;
+
+    ($self->{type}, $self->{run}) = @ARGV;
+
+    if (!$self->{type} || $self->{type} !~ /^(?:stats|event)\z/ || ($self->{run} && $self->{run} ne "run")) {
+        print "Usage: $0 [ stats | event ] [ run ]\n";
+        exit 1;
+    }
+
+    $self->{config} = Bloonix::Config->parse(
+        "@@CONFDIR@@/bloonix/server/main.conf"
+    );
+
+    $self->{log} = Log::Handler->new(
+        screen => {
+            maxlevel => "info"
+        }
+    );
+
+    $self->{rest} = Bloonix::REST->new(
+        $self->{config}->{elasticsearch}
+    );
+
+    $self->{sla} = {
+        0 => 3,    # basic package
+        1 => 60,   # old basic package
+        2 => 400,  # basic for featured customers
+        3 => 400,  # advanced package
+        4 => 1900, # pro package
+        5 => 3800  # xxl package
+    };
+
+    $self->{json} = JSON->new();
+
+    $self->connect_database;
+    $self->get_indices;
+    $self->delete_data;
+    $self->disconnect_database;
+    $self->delete_empty_indices;
+}
+
+sub connect_database {
+    my $self = shift;
+    my $config = $self->{config}->{database};
+
+    $self->{dbh} = DBI->connect(
+        join(";",
+            "DBI:$config->{driver}:database=$config->{database}",
+            "host=$config->{host}",
+            "port=$config->{port}",
+        ),
+        $config->{user},
+        $config->{password},
+        { RaiseError => 1 },
+    );
+}
+
+sub disconnect_database {
+    my $self = shift;
+
+    $self->dbh->disconnect;
+}
+
+sub delete_data {
+    my $self = shift;
+
+    my $sth = $self->dbh->prepare(
+        join(" ",
+            "select host.id, host.hostname, host.ipaddr, company.sla",
+            "from host",
+            "inner join company on host.company_id = company.id"
+        )
+    );
+
+    $sth->execute;
+
+    while (my $host = $sth->fetchrow_hashref) {
+        $self->log->notice("--- start processing host $host->{id} type $self->{type} ---");
+        $self->delete($host);
+    }
+
+    $sth->finish;
+}
+
+sub delete {
+    my ($self, $host) = @_;
+
+    my $time = $self->sla_expire_time($host->{sla});
+
+    $self->log->notice(
+        "request data for host $host->{id},",
+        "sla $host->{sla}, time $time"
+    );
+
+    my $total = $self->get_total_size($time, $host);
+    $self->log->notice("found $total documents for host $host->{id} sla $host->{sla}");
+
+    if ($total == 0) {
+        return;
+    }
+
+    foreach my $index (@{$self->{indices}}) {
+        my $type = $self->{type};
+
+        $self->log->notice(
+            "delete data from index $index for host $host->{id}",
+            "older than", $self->datestamp($time)
+        );
+
+        if (!$self->{run}) {
+            $self->log->notice("test run - skip deletion");
+            next;
+        }
+
+        my @request = (
+            path => "$index/$type/_query",
+            data => {
+                query => {
+                    filtered => {
+                        query => { term => { host_id => $host->{id} } },
+                        filter => { range => { time => { lt => $time } } }
+                    }
+                }
+            }
+        );
+
+        my $result = $self->rest->delete(@request);
+
+        if (!$result) {
+            $self->log->dump(error => \@request);
+            $self->log->die(error => $self->rest->errstr);
+        }
+
+        $self->log->notice("deletion was successful for host $host->{id}");
+        $self->log->notice("run the optimizer for index $index");
+
+        $self->rest->post(
+            path => "$index/_optimize?only_expunge_deletes"
+        );
+    }
+
+    if (!$self->{run}) {
+        return;
+    }
+
+    $total -= $self->get_total_size($time, $host);
+    $self->log->notice("about $total documents deleted for host $host->{id}");
+}
+
+sub delete_empty_indices {
+    my $self = shift;
+    my $count = 0;
+
+    $self->log->notice("--- check for empty indices ---");
+
+    foreach my $index (@{$self->{indices}}) {
+        my $result = $self->rest->get(
+            path => "$index/_search",
+            data => { size => 0 }
+        ) or die $self->rest->errstr;
+
+        if (defined $result->{hits}->{total} && $result->{hits}->{total} == 0) {
+            $self->log->notice("delete index $index");
+            $count++;
+
+            if ($self->{run}) {
+                $self->rest->delete(path => $index)
+                    or die $self->rest->errstr;
+            }
+        } else {
+            $self->log->notice(
+                "index $index has", $result->{hits}->{total}, "documents"
+            );
+        }
+    }
+
+    if ($count == 0) {
+        $self->log->notice("$count indices deleted");
+    }
+}
+
+sub sla_expire_time {
+    my ($self, $sla) = @_;
+
+    my $hold = $self->sla->{$sla} * 86400;
+
+    return (time - $hold) * 1000;
+}
+
+sub get_indices {
+    my $self = shift;
+
+    my $result = $self->rest->get(path => "_aliases")
+        or die $self->rest->errstr;
+
+    my @indices;
+
+    foreach my $index (sort keys %$result) {
+        if ($index =~ /^bloonix\-\d\d\d\d\-\d\d\z/) {
+            push @indices, $index;
+        }
+    }
+
+    $self->{indices} = \@indices;
+}
+
+sub get_total_size {
+    my ($self, $time, $host) = @_;
+    my $type = $self->{type};
+    my $total = 0;
+
+    foreach my $index (@{$self->{indices}}) {
+        $self->log->notice("get total size of index $index for host $host->{id}");
+
+        my $data = {
+            from => 0,
+            size => 0,
+            filter => {
+                and => [
+                    { term => { host_id => $host->{id} } },
+                    { range => { time => { lt => $time } } }
+                ]
+            }
+        };
+
+        #print JSON->new->encode($data);
+
+        my $result = $self->rest->get(
+            path => "$index/$type/_search",
+            data => $data
+        ) or die $self->rest->errstr;
+
+        $total += $result->{hits}->{total};
+    }
+
+    return $total;
+}
+
+sub datestamp {
+    my ($self, $time) = @_;
+    $time = do { $time =~ /^(\d{10})/; $1 };
+    my @time = (localtime($time))[reverse 0..5];
+    $time[0] += 1900;
+    $time[1] += 1;
+    return sprintf "%04d-%02d-%02d", @time[0..2];
+}

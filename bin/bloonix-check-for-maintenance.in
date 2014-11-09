@@ -1,0 +1,207 @@
+#!@@PERL@@
+use strict;
+use warnings;
+use Getopt::Long qw(:config no_ignore_case);
+use Log::Handler;
+use DBI;
+use Bloonix::Config;
+use Bloonix::SQL::Creator;
+
+$ENV{PATH} = join(":",
+    $ENV{PATH},
+    "/usr/local/lib/bloonix/plugins",
+    "/usr/lib/bloonix/plugins",
+    "/usr/local/share/bloonix/plugins",
+    "/usr/share/bloonix/plugins",
+);
+
+my $version    = "0.1";
+my $progname   = do { $0 =~ m!([^/]+)\z!; $1 };
+my $time       = time;
+my $o_config   = "@@CONFDIR@@/bloonix/server/main.conf";
+my $o_host     = [ ];
+my $o_expire   = 600;
+my $o_logfile  = "/var/log/bloonix/bloonix-check-for-maintenance.log";
+my $o_warning  = "5000,40%";
+my $o_critical = "10000,60%";
+my $o_help     = "";
+my $o_version  = "";
+
+GetOptions(
+    "C|config=s"   => \$o_config,
+    "H|host=s@"    => $o_host,
+    "e|expire=s"   => \$o_expire,
+    "L|logfile=s"  => \$o_logfile,
+    "w|warning=s"  => \$o_warning,
+    "c|critical=s" => \$o_critical,
+    "h|help"       => \$o_help,
+    "v|version"    => \$o_version,
+) or exit 1;
+
+if ($o_help) {
+    print "Usage: $progname [ OPTIONS ]\n\n";
+    print "Options:\n\n";
+    print "-C, --config <file>\n";
+    print "    The configruation file.\n";
+    print "    Default: @@CONFDIR@@/bloonix/server/main.conf\n";
+    print "-H, --host <ip>\n";
+    print "    The IP address or hostname to check.\n";
+    print "    It's possible to pass a comma separated list of hosts.\n";
+    print "-w, --warning <threshold>\n";
+    print "    The threshold is passed to check-ping -w\n";
+    print "-c, --critical <threshold>\n";
+    print "    The threshold is passed to check-ping -c\n";
+    print "-e, --expire <seconds>\n";
+    print "    When the lock file can be deleted after\n";
+    print "    the last creation.\n";
+    print "    Default: 600\n";
+    print "-L, --logfile <file>\n";
+    print "    The logfile to log all operations.\n";
+    print "    Default: /var/log/bloonix/bloonix-check-for-maintenance.log\n";
+    print "-h, --help\n";
+    print "    Print the help.\n";
+    print "-v, --version\n";
+    print "    Print the version number.\n\n";
+    print "* Option -H\n\n";
+    print "  Example call:\n\n";
+    print "  $progname -H host-a,host-b\n\n";
+    print "  The hosts are checked in order. At first my-gateway is checked.\n";
+    print "  If the ping to host my-gateway failed then a maintenance file\n";
+    print "  will be created and it's not necessary to check host-a and host-b.\n";
+    print "  If the ping to my-gateway runs without errors then the host-a and\n";
+    print "  host-b will be checked. Please note that if a comma separated list\n";
+    print "  of hosts is set to option -H then the lowest status of the ping\n";
+    print "  checks are decisive. As example if the ping to host-a failed with\n";
+    print "  status CRITICAL and the ping to host-a returns OK, then no\n";
+    print "  maintenance file will be created because the status of host-b is\n";
+    print "  decisive. If the ping to host-a was successful then host-b will\n";
+    print "  be checked because each status higher than OK would be ignored.\n";
+    print "\n";
+    exit 0;
+}
+
+if ($o_version) {
+    print "$progname v$version\n";
+    exit 0;
+}
+
+if (!@$o_host) {
+    print "Missing mandatory parameter --host\n";
+    exit 1;
+}
+
+my $log = Log::Handler->new();
+
+$log->add(
+    file => {
+        filename => $o_logfile,
+        maxlevel => "info",
+        timeformat => "%b %d %Y %H:%M:%S",
+        message_layout => "[%T] %L %P %t %m (%C)",
+    }
+);
+
+$log->add(
+    screen => {
+        maxlevel => "critical",
+        timeformat => "%b %d %Y %H:%M:%S",
+        message_layout => "[%T] %L %P %t %m (%C)",
+    }
+);
+
+$log->notice("--- start program");
+
+my $maintenance = 0;
+my $expire = undef;
+my $renew = $o_expire - int($o_expire / 2);
+my ($status, $message);
+
+foreach my $host (@$o_host) {
+    $log->notice("check host $host");
+    my @stdout = qx{check-ping --host $host --warning $o_warning --critical $o_critical 2>&1};
+    $message = shift @stdout;
+
+    if (!defined $status) {
+        $status = $?;
+    } elsif ($? < $status) {
+        $status = $?;
+    }
+
+    if ($status == 0) {
+        # No further check is necessary if the status
+        # of the ping check was successful.
+        last;
+    } else {
+        $log->warning($message);
+    }
+}
+
+# Create a maintenance lock file if the status
+# of the ping check is CRITICAL or UNKNOWN.
+if ($status > 1) {
+    $maintenance = 1;
+}
+
+my $config = Bloonix::Config->parse($o_config);
+$config = $config->{database};
+
+my $dbh = DBI->connect(
+    join(";",
+        "DBI:$config->{driver}:database=$config->{database}",
+        "host=$config->{host}",
+        "port=$config->{port}",
+    ),
+    $config->{user},
+    $config->{password},
+    { RaiseError => 1 },
+);
+
+my $sql = Bloonix::SQL::Creator->new(driver => $config->{driver});
+my ($stmt, @bind) = $sql->select(table => "maintenance", column => "active");
+my $sth = $dbh->prepare($stmt);
+$sth->execute(@bind);
+my $last = $sth->fetchrow_hashref;
+$last = $last ? $last->{active} : 0;
+
+if ($last) {
+    if ($last == 1) {
+        $log->warning("manual maintenance active");
+        exit 1;
+    }
+
+    $expire = $last + $o_expire;
+
+    if ($expire < $time) {
+        if ($maintenance == 0) {
+            $log->notice("disable maintenance mode");
+            my ($ustmt, @ubind) = $sql->update(
+                table => "maintenance",
+                data => { active => 0 }
+            );
+            $dbh->do($ustmt, undef, @ubind);
+        }
+    } elsif ($expire - $time > $renew) {
+        # The maintenance lock file shouldn't be created each minute. 
+        # For this reason it will be checked if the timestamp in the
+        # maintenance lock file is older than int(expire/2).
+        $log->notice("maintenance mode is not expired,", $expire - $time, "seconds left");
+        $maintenance = 0;
+    }
+}
+
+if ($maintenance) {
+    if (defined $expire && $expire - $time <= $renew) {
+        $log->critical("re-new maintenance mode to $time ($message)");
+    } else {
+        $log->critical("set maintenance mode to $time ($message)");
+    }
+
+    my ($ustmt, @ubind) = $sql->update(
+        table => "maintenance",
+        data => { active => $time }
+    );
+
+    $dbh->do($ustmt, undef, @ubind);
+}
+
+$log->notice("check finished");

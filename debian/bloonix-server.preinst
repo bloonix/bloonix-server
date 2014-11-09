@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+    install|upgrade)
+        if ! getent group bloonix >/dev/null; then
+            echo "Add group bloonix.."
+            groupadd bloonix
+        fi
+        if ! getent passwd bloonix >/dev/null; then
+            echo "Add user bloonix.."
+            useradd bloonix -g bloonix -d /var/run/bloonix -s /bin/false -r
+        fi
+    ;;
+esac
+
+exit 0

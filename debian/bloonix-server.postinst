@@ -1,0 +1,56 @@
+#!/bin/sh
+
+set -e
+WITH_SYSTEMD=0
+
+__configure() {
+    echo "Configure bloonix with systemd=$WITH_SYSTEMD"
+
+    if [ $WITH_SYSTEMD -eq 1 ] ; then
+        systemctl preset bloonix-srvchk.service
+        systemctl preset bloonix-server.service
+    else
+        update-rc.d bloonix-server defaults >/dev/null
+        update-rc.d bloonix-srvchk defaults >/dev/null
+    fi
+}
+
+case "$1" in
+    configure) __configure ;;
+esac
+
+if [ ! -e "/etc/bloonix/server/main.conf" ] ; then
+    mkdir -p /etc/bloonix/server
+    cp -a /usr/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
+    chown -R bloonix:bloonix /etc/bloonix/server
+fi
+
+if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
+    mkdir -p /etc/bloonix/srvchk
+    cp -a /usr/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
+    chown -R bloonix:bloonix /etc/bloonix/srvchk
+fi
+
+if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" ] ; then
+    cp /usr/lib/bloonix/etc/server/nginx.conf /etc/nginx/conf.d/bloonix-server.conf
+    chmod 644 /etc/nginx/conf.d/bloonix-server.conf
+    chown root:root /etc/nginx/conf.d/bloonix-server.conf
+fi
+
+echo "Starting (condrestart) bloonix-server..";
+
+if [ $WITH_SYSTEMD -eq 1 ] ; then
+    systemctl condrestart bloonix-server.service
+else
+    /etc/init.d/bloonix-server condrestart
+fi
+
+echo "Starting (condrestart) bloonix-srvchk..";
+
+if [ $WITH_SYSTEMD -eq 1 ] ; then
+    systemctl condrestart bloonix-srvchk.service
+else
+    /etc/init.d/bloonix-srvchk condrestart
+fi
+
+exit 0

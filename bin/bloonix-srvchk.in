@@ -1,0 +1,88 @@
+#!@@PERL@@
+
+=head1 NAME
+
+bloonix-service-checker
+
+=head1 SYNOPSIS
+
+    bloonix-service-checker -c /etc/bloonix/srvchk/main.conf -p /var/run/bloonix/bloonix-service-checker.pid
+
+=head1 OPTIONS
+
+=over 4
+
+=item -c, --config-file
+
+The main configuration file for the daemon.
+
+Default: /etc/bloonix/srvchk/main.conf
+
+=item -p, --pid-file
+
+Where to store the daemon pid.
+
+Default: /var/run/bloonix/bloonix-service-checker.pid
+
+=item -v, --version
+
+Print the version number.
+
+=item -h, --help
+
+Print the help.
+
+=back
+
+=head1 AUTHOR
+
+Jonny Schulz <support(at)bloonix.de>.
+
+=head1 COPYRIGHT
+
+Copyright (C) 2009-2014 by Jonny Schulz. All rights reserved.
+
+=cut
+
+use strict;
+use warnings;
+use Bloonix::ServiceChecker;
+use Getopt::Long;
+
+my $config_file = "@@CONFDIR@@/bloonix/srvchk/main.conf";
+my $pid_file = "@@RUNDIR@@/bloonix/bloonix-srvchk.pid";
+my $version = undef;
+my $help = undef;
+
+GetOptions(
+    'c|config-file=s' => \$config_file,
+    'p|pid-file=s' => \$pid_file,
+    'h|help' => \$help,
+    'v|version' => \$version
+) or exit 1;
+
+if ($help) {
+    print "Usage: blxsrv [ options ]\n";
+    print "-c, --config-file <config>\n";
+    print "    The configuration file.\n";
+    print "    Default: @@CONFDIR@@/bloonix/srvchk/main.conf\n";
+    print "-p, --pid-file <file>\n";
+    print "    Where to store the daemon pid.\n";
+    print "    Default: @@RUNDIR@@/bloonix/bloonix-srvchk.pid\n";
+    print "-v, --version\n";
+    print "    Print the version number.\n";
+    print "-h, --help\n";
+    print "    Print the help.\n";
+    exit 0;
+}
+
+if ($version) {
+    my $v = $Bloonix::ServiceChecker::VERSION;
+    print "Bloonix service checker v$v\n";
+    exit 0;
+}
+
+Bloonix::ServiceChecker->run(
+    config_file => $config_file,
+    pid_file => $pid_file
+);

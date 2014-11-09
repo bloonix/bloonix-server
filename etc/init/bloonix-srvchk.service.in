@@ -1,0 +1,17 @@
+[Unit]
+Description=Bloonix Service Checker
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=@@RUNDIR@@/bloonix/bloonix-srvchk.pid
+ExecStartPre=@@USRLIBDIR@@/bloonix/bin/bloonix-pre-start @@CACHEDIR@@/bloonix @@LOGDIR@@/bloonix @@RUNDIR@@/bloonix
+ExecStart=/usr/bin/bloonix-srvchk --pid-file @@RUNDIR@@/bloonix/bloonix-srvchk.pid --config-file @@CONFDIR@@/bloonix/srvchk/main.conf
+ExecReload=/bin/kill -1 $MAINPID
+ExecStop=/bin/kill -15 $MAINPID
+PrivateTmp=true
+TimeoutStartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
