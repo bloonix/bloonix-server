@@ -1324,7 +1324,8 @@ sub check_if_srvchk_remote_error {
             mail_to => $redirect_config->{mail_to},
             description => $self->c_service->{description},
             comment => $self->c_service->{comment},
-            escalation => "-1"
+            escalation => "-1",
+            redirect => 1
         );
     }
 
@@ -1335,7 +1336,8 @@ sub check_if_srvchk_remote_error {
     #        service => $self->c_service->{service_name},
     #        status => $self->n_service->{status},
     #        message => $self->n_service->{message},
-    #        sms_to => $redirect_config->{sms_to}
+    #        sms_to => $redirect_config->{sms_to},
+    #        redirect => 1
     #    );
     #}
 
@@ -1946,6 +1948,10 @@ sub send_sms {
             $message .= " - " . join(", ", @service);
         }
 
+        if ($sms->{redirect}) {
+            $message = "RAD: $message";
+        }
+
         if (length($message) > 160) {
             $message = substr($message, 0, 157) . "...";
         }
@@ -2036,7 +2042,7 @@ sub send_mails {
     foreach my $mail_to (keys %{ $self->{mails} }) {
         my $mails = $self->{mails}->{$mail_to};
         my $subject = $param->{subject};
-        my (%status, $status, @id);
+        my (%status, $status, $redirect, @id);
 
         my $message = "*** Status for host $host->{hostname} ($host->{ipaddr}) at ". $self->stime ." ***\n\n";
         $message .= "https://$hostname/#monitoring/hosts/$host->{id}\n";
@@ -2079,6 +2085,10 @@ sub send_mails {
             if (defined $m->{escalation}) {
                 $message .= "Level of escalation: $m->{escalation}\n";
             }
+
+            if ($m->{redirect}) {
+                $redirect = 1;
+            }
         }
 
         foreach my $s (qw/OK WARNING CRITICAL UNKNOWN INFO/) {
@@ -2092,6 +2102,10 @@ sub send_mails {
         }
 
         $subject =~ s/%s/$status/;
+
+        if ($redirect) {
+            $subject = "RAD: $subject";
+        }
 
         my %email = (
             From => $param->{from},

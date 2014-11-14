@@ -1,3 +1,9 @@
+bloonix-server (0.7) released at 2014-XX-XX
+
+    * Added the prefix RAD (remote agent dead) to the mail subject
+      for mails that are redirected to an admin if a remote
+      agent seems to be dead.
+
 bloonix-server (0.6) released at 2014-11-08
 
     * Fixed that volatile states will be hold until an administrator
