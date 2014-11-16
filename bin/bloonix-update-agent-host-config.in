@@ -310,7 +310,7 @@ sub update_hosts {
     $self->log->notice("rewrite hosts config");
 
     if ($ipaddr =~ /^(localhost|127.0.0.1)\z/) {
-        system("mv /var/tmp/bloonix-agent-hosts.conf /etc/bloonix/agent/hosts.conf");
+        system("mv /var/tmp/bloonix-agent-hosts.conf /etc/bloonix/agent/conf.d/hosts.conf");
         system("/etc/init.d/bloonix-agent reload");
         return;
     }
@@ -332,22 +332,22 @@ sub update_hosts {
     $self->sshexec(
         "scp_put",
         "/var/tmp/bloonix-agent-hosts.conf",
-        "/etc/bloonix/agent/hosts.temp",
+        "/etc/bloonix/agent/conf.d/hosts.temp",
     ) or die "unable to put host config";
 
     $self->sshexec(
         "system",
-        "chmod 640 /etc/bloonix/agent/hosts.temp"
+        "chmod 640 /etc/bloonix/agent/conf.d/hosts.temp"
     ) or die "unable to chmod host config";
 
     $self->sshexec(
         "system",
-        "chown bloonix:bloonix /etc/bloonix/agent/hosts.temp"
+        "chown bloonix:bloonix /etc/bloonix/agent/conf.d/hosts.temp"
     ) or die "unable to chown host config";
 
     $self->sshexec(
         "system",
-        "mv /etc/bloonix/agent/hosts.temp /etc/bloonix/agent/hosts.conf"
+        "mv /etc/bloonix/agent/conf.d/hosts.temp /etc/bloonix/agent/conf.d/hosts.conf"
     ) or die "unable to move host config";
 
     $self->sshexec(
