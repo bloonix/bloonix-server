@@ -223,6 +223,9 @@ sub get_hosts {
 
     my $sth = $dbh->prepare($stmt);
     $sth->execute(@bind);
+    my $agent_id = $self->{agent_id} eq "all"
+        ? [ "localhost", "intranet", "remote" ]
+        : $self->{agent_id};
 
     while (my $host = $sth->fetchrow_hashref) {
         my $ip = $host->{ipaddr};
@@ -258,7 +261,7 @@ sub get_hosts {
                 and => {
                     table  => "service_parameter",
                     column => "agent_id",
-                    value  => $self->{agent_id}
+                    value  => $agent_id
                 }
             ],
         );
