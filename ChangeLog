@@ -1,8 +1,9 @@
-bloonix-server (0.7) released at 2014-XX-XX
+bloonix-server (0.7) released at 2014-11-16
 
     * Added the prefix RAD (remote agent dead) to the mail subject
       for mails that are redirected to an admin if a remote
       agent seems to be dead.
+    * Fix permissions of /etc/bloonix*.
 
 bloonix-server (0.6) released at 2014-11-08
 

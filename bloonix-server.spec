@@ -99,13 +99,13 @@ systemctl condrestart bloonix-server.service
 if [ ! -e "/etc/bloonix/server/main.conf" ] ; then
     mkdir -p /etc/bloonix/server
     cp -a /usr/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
-    chown bloonix:bloonix /etc/bloonix/server /etc/bloonix/server/main.conf
+    chown root:bloonix /etc/bloonix /etc/bloonix/server /etc/bloonix/server/main.conf
 fi
 
 if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
     mkdir -p /etc/bloonix/srvchk
     cp -a /usr/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
-    chown bloonix:bloonix /etc/bloonix/srvchk /etc/bloonix/srvchk/main.conf
+    chown root:bloonix /etc/bloonix /etc/bloonix/srvchk /etc/bloonix/srvchk/main.conf
 fi
 
 if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" ] ; then

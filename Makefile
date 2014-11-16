@@ -49,14 +49,15 @@ test:
 install:
 
 	# Base Bloonix directories
-	for d in $(CACHEDIR) $(CONFDIR) $(LOGDIR) $(RUNDIR) ; do \
+	for d in $(CACHEDIR) $(LOGDIR) $(RUNDIR) ; do \
 		./install-sh -d -m 0750 -o $(USERNAME) -g $(GROUPNAME) $$d/bloonix; \
 	done;
 
 	./install-sh -d -m 0755 $(PREFIX)/bin;
-	./install-sh -d -m 0755 -o $(USERNAME) -g $(GROUPNAME) $(SRVDIR)/bloonix;
-	./install-sh -d -m 0755 -o $(USERNAME) -g $(GROUPNAME) $(SRVDIR)/bloonix/server;
-	./install-sh -d -m 0750 -o $(USERNAME) -g $(GROUPNAME) $(CONFDIR)/bloonix/server; \
+	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix;
+	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix/server;
+	./install-sh -d -m 0750 -o root -g $(GROUPNAME) $(CONFDIR)/bloonix;
+	./install-sh -d -m 0750 -o root -g $(GROUPNAME) $(CONFDIR)/bloonix/server;
 
 	for file in \
 		bloonix-server \
@@ -96,13 +97,13 @@ install:
 
 	if test "$(BUILDPKG)" = "0" ; then \
 		if test ! -e "$(CONFDIR)/bloonix/server/main.conf" ; then \
-			./install-sh -c -m 0640 -o $(USERNAME) -g $(GROUPNAME) etc/bloonix/server/main.conf $(CONFDIR)/bloonix/server/main.conf; \
+			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/server/main.conf $(CONFDIR)/bloonix/server/main.conf; \
 		fi; \
 		if test ! -e "$(CONFDIR)/bloonix/server/nginx.conf" ; then \
-			./install-sh -c -m 0640 -o $(USERNAME) -g $(GROUPNAME) etc/bloonix/server/nginx.conf $(CONFDIR)/bloonix/server/nginx.conf; \
+			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/server/nginx.conf $(CONFDIR)/bloonix/server/nginx.conf; \
 		fi; \
 		if test ! -e "$(CONFDIR)/bloonix/srvchk/main.conf" ; then \
-			./install-sh -c -m 0640 -o $(USERNAME) -g $(GROUPNAME) etc/bloonix/srvchk/main.conf $(CONFDIR)/bloonix/srvchk/main.conf; \
+			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/srvchk/main.conf $(CONFDIR)/bloonix/srvchk/main.conf; \
 		fi; \
 	fi;
 
