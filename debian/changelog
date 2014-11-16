@@ -1,3 +1,12 @@
+bloonix-server (0.7-1) unstable; urgency=low
+
+    * Added the prefix RAD (remote agent dead) to the mail subject
+      for mails that are redirected to an admin if a remote
+      agent seems to be dead.
+    * Fix permissions of /etc/bloonix*.
+
+ -- Jonny Schulz <js@bloonix.de>  Sun, 16 Nov 2014 18:02:20 +0100
+
 bloonix-server (0.6-1) unstable; urgency=low
 
     * Fixed that volatile states will be hold until an administrator

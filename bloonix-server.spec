@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.6
+Version: 0.7
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -98,14 +98,20 @@ systemctl condrestart bloonix-server.service
 
 if [ ! -e "/etc/bloonix/server/main.conf" ] ; then
     mkdir -p /etc/bloonix/server
+    chown root:root /etc/bloonix /etc/bloonix/server
+    chmod 755 /etc/bloonix /etc/bloonix/server
     cp -a /usr/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
-    chown root:bloonix /etc/bloonix /etc/bloonix/server /etc/bloonix/server/main.conf
+    chown root:bloonix /etc/bloonix/server/main.conf
+    chmod 640 /etc/bloonix/server/main.conf
 fi
 
 if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
     mkdir -p /etc/bloonix/srvchk
+    chown root:root /etc/bloonix /etc/bloonix/srvchk
+    chmod 755 /etc/bloonix /etc/bloonix/srvchk
     cp -a /usr/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
-    chown root:bloonix /etc/bloonix /etc/bloonix/srvchk /etc/bloonix/srvchk/main.conf
+    chown root:bloonix /etc/bloonix/srvchk/main.conf
+    chmod 640 /etc/bloonix/srvchk/main.conf
 fi
 
 if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" ] ; then
@@ -178,6 +184,11 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sun Nov 16 2014 Jonny Schulz <js@bloonix.de> - 0.7-1
+- Added the prefix RAD (remote agent dead) to the mail subject
+  for mails that are redirected to an admin if a remote
+  agent seems to be dead.
+- Fix permissions of /etc/bloonix*.
 * Sat Nov 08 2014 Jonny Schulz <js@bloonix.de> - 0.6-1
 - Fixed that volatile states will be hold until an administrator
   marks the status as viewed.

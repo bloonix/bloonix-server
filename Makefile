@@ -56,8 +56,8 @@ install:
 	./install-sh -d -m 0755 $(PREFIX)/bin;
 	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix;
 	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix/server;
-	./install-sh -d -m 0750 -o root -g $(GROUPNAME) $(CONFDIR)/bloonix;
-	./install-sh -d -m 0750 -o root -g $(GROUPNAME) $(CONFDIR)/bloonix/server;
+	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix;
+	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix/server;
 
 	for file in \
 		bloonix-server \
