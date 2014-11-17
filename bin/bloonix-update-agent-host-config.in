@@ -298,7 +298,7 @@ sub update_hosts {
 
         print $fh join("",
             "host {\n",
-            "    host_id  $host->{id}\n",
+            "    host_id  $host->{id}.$self->{agent_id}\n",
             "    password $host->{password}\n",
             "    agent_id $self->{agent_id}\n",
             "}\n",

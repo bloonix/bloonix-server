@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.7
+Version: 0.8
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -184,6 +184,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Nov 17 2014 Jonny Schulz <js@bloonix.de> - 0.8-1
+- bloonix-update-agent-host-config adds now the agent id
+  as postfix to each host id.
 * Sun Nov 16 2014 Jonny Schulz <js@bloonix.de> - 0.7-1
 - Added the prefix RAD (remote agent dead) to the mail subject
   for mails that are redirected to an admin if a remote

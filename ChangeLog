@@ -1,3 +1,8 @@
+bloonix-server (0.8) released at 2014-11-17
+
+    * bloonix-update-agent-host-config adds now the agent id
+      as postfix to each host id.
+
 bloonix-server (0.7) released at 2014-11-16
 
     * Added the prefix RAD (remote agent dead) to the mail subject
