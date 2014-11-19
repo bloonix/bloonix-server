@@ -201,6 +201,9 @@ sub request {
     if (defined $opts{hostid}) {
         $opts{host_id} = $opts{hostid};
     }
+    if ($opts{host_id} =~ /^(\d+)\.(all|remote|localhost|intranet)\z/) {
+        $opts{host_id} = $1;
+    }
     if ($opts{agentid}) {
         $opts{agent_id} = $opts{agentid};
     }
