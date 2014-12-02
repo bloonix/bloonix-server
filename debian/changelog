@@ -1,3 +1,10 @@
+bloonix-server (0.9-1) unstable; urgency=low
+
+    * Changed the boot facility.
+    * Allow multiple locations within the host id.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 02 Dec 2014 13:57:25 +0100
+
 bloonix-server (0.8-1) unstable; urgency=low
 
     * bloonix-update-agent-host-config adds now the agent id

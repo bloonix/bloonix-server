@@ -1,6 +1,7 @@
-bloonix-server (0.9) released at 2014-XX-XX
+bloonix-server (0.9) released at 2014-12-02
 
     * Changed the boot facility.
+    * Allow multiple locations within the host id.
 
 bloonix-server (0.8) released at 2014-11-17
 
