@@ -1704,7 +1704,7 @@ sub store_stats {
         my $p_def = $plugin_def->{$plugin_id};
         my $p_stat = $plugin_stat->{$plugin_id};
 
-        if ($n_service->{result} && ref $n_service->{result} && !$self->attempt_max_reached->{$service_id}) {
+        #if ($n_service->{result} && ref $n_service->{result} && !$self->attempt_max_reached->{$service_id}) {
             $self->save_results(
                 service_id => $service_id,
                 status => $n_service->{status},
@@ -1712,7 +1712,7 @@ sub store_stats {
                 data => $n_service->{result},
                 attempts => "$c_service->{attempt_counter}/$c_service->{attempt_max}"
             );
-        }
+        #}
 
         if (!defined $stats) {
             $self->log->info("no statistics received for service id $service_id");

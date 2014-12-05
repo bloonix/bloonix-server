@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.9
+Version: 0.10
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -184,6 +184,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Fri Dec 05 2014 Jonny Schulz <js@bloonix.de> - 0.10-1
+- Plugin results are now stored each time and not only
+  by status switches.
 * Tue Dec 02 2014 Jonny Schulz <js@bloonix.de> - 0.9-1
 - Changed the boot facility.
 - Allow multiple locations within the host id.
