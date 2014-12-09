@@ -1,3 +1,8 @@
+bloonix-server (0.11) released at 2014-XX-XX
+
+    * Improved script to count elasticsearch documents for each
+      service.
+
 bloonix-server (0.10) released at 2014-12-05
 
     * Plugin results are now stored each time and not only

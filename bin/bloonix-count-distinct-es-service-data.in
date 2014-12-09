@@ -3,22 +3,54 @@ use strict;
 use warnings;
 use Bloonix::Config;
 use Bloonix::REST;
-use Data::Dumper;
 use Getopt::Long;
 use DBI;
+
+my $o_company = [];
+my $o_hosts = [];
+my $o_index = [];
+my $o_type = "stats";
+my $o_json;
+my $o_help;
+
+GetOptions(
+    "c|company=s@" => $o_company,
+    "H|host=s@" => $o_hosts,
+    "i|index=s@" => $o_index,
+    "t|type=s" => \$o_type,
+    "j|json" => \$o_json,
+    "h|help" => \$o_help
+);
+
+if ($o_help) {
+    print "Usage: $0 [ OPTIONAL ]\n\n";
+    print "Options:\n\n";
+    print "-c, --company <company>\n";
+    print "    The company to count.\n";
+    print "-H, --host <host-id>\n";
+    print "    The host id to count.\n";
+    print "-i, --index <index>\n";
+    print "    The elasticsearch index to request.\n";
+    print "-j, --json\n";
+    print "    Print the output in JSON.\n";
+    print "-h, --help\n";
+    print "    Print the help.\n\n";
+    exit 0;
+}
 
 my $config_file = "@@CONFDIR@@/bloonix/server/main.conf";
 my $config = Bloonix::Config->parse($config_file);
 my $dbconf = $config->{database};
-my $index = $ARGV[0];
-my $type = $ARGV[1] || "stats";
-
-if (!$index) {
-    my @time = (localtime(time))[reverse 0..5];
-    $index = sprintf "bloonix-%04d-%02d", $time[0] + 1900, $time[1] + 1;
-}
+my @indexes;
 
 my $rest = Bloonix::REST->new(%{$config->{elasticsearch}});
+
+if (@$o_index) {
+    @indexes = sort @$o_index;
+} else {
+    my $res = $rest->get(path => "/_aliases");
+    @indexes = sort keys %$res;
+}
 
 my $dbh = DBI->connect(
     "DBI:$dbconf->{driver}:database=$dbconf->{database};host=$dbconf->{host};port=$dbconf->{port}",
@@ -30,44 +62,86 @@ my $dbh = DBI->connect(
 $dbh->{pg_enable_utf8} = 1;
 binmode STDOUT, ":utf8";
 
-my $sth = $dbh->prepare("
-select      service.*, host.hostname, host.ipaddr, company.company
-from        service
-inner join  host on service.host_id = host.id
-inner join  company on host.company_id = company.id
-order by    company.id, host.id, service.id
-");
+my @stmt = (
+    "select service.*, service_parameter.service_name, host.hostname, host.ipaddr, company.company, company.id AS company_id",
+    "from service",
+    "inner join service_parameter on service.service_parameter_id = service_parameter.ref_id",
+    "inner join host on service.host_id = host.id",
+    "inner join company on host.company_id = company.id"
+);
 
-$sth->execute;
+if (@$o_company) {
+    push @stmt, "where company.id in (";
+    push @stmt, join(",", map {"?"} keys @$o_company);
+    push @stmt, ")";
+}
+
+if (@$o_hosts) {
+    push @stmt, scalar keys @$o_company ? "and" : "where";
+    push @stmt, " host.id in (";
+    push @stmt, join(",", map {"?"} keys @$o_hosts);
+    push @stmt, ")\n";
+}
+
+push @stmt, (
+    "order by company.id, host.id, service.id"
+);
+
+my $stmt = join(" ", @stmt);
+my @bind = (@$o_company, @$o_hosts);
+my $sth = $dbh->prepare($stmt);
+$sth->execute(@bind);
 
 my $total_docs = 0;
 my $service_count = 0;
+my $format = "%-40s  %-40s  %-50s  %10s\n";
+
+if (!$o_json) {
+    printf $format, qw(COMPANY HOST SERVICE COUNT);
+}
 
 while (my $row = $sth->fetchrow_hashref) {
-    my $res = $rest->get(
-        path => "$index/$type/_search",
-        data => {
-            from => 0,
-            size => 0,
-            filter => {
-                and => [
-                    { term => { service_id => $row->{id} } }
-                ]
+    my $total = 0;
+
+    foreach my $index (@indexes) {
+        my $res = $rest->get(
+            path => "$index/$o_type/_search",
+            data => {
+                from => 0,
+                size => 0,
+                filter => {
+                    and => [
+                        { term => { service_id => $row->{id} } }
+                    ]
+                }
             }
+        );
+
+        if ($res->{hits}->{total}) {
+            $total += $res->{hits}->{total};
         }
-    );
-
-    if ($res->{hits}->{total}) {
-        printf "%-30s  %-40s  %-30s  %6s  %8s\n",
-            &substring($row->{company}, 30),
-            &substring($row->{hostname}, 40),
-            &substring($row->{plugin}, 30),
-            $row->{id},
-            $res->{hits}->{total};
-
-        $total_docs += $res->{hits}->{total};
-        $service_count += 1;
     }
+
+    if ($o_json) {
+        print JSON->new->encode({
+            company_id => $row->{company_id},
+            company => $row->{company},
+            host_id => $row->{host_id},
+            hostname => $row->{hostname},
+            service_id => $row->{id},
+            service_name => $row->{service_name},
+            count => $total
+        }), "\n";
+    } else {
+        printf $format,
+            &substring($row->{company_id} .": ".$row->{company}, 40),
+            &substring($row->{host_id} .": ". $row->{hostname}, 40),
+            &substring($row->{id} .": ". $row->{service_name}, 50),
+            $total;
+    }
+
+    $total_docs += $total;
+    $service_count += 1;
 }
 
 print "\nTotal documents: $total_docs\n";

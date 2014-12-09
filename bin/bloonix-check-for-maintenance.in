@@ -15,7 +15,7 @@ $ENV{PATH} = join(":",
     "/usr/share/bloonix/plugins",
 );
 
-my $version    = "0.1";
+my $version    = "0.2";
 my $progname   = do { $0 =~ m!([^/]+)\z!; $1 };
 my $time       = time;
 my $o_config   = "@@CONFDIR@@/bloonix/server/main.conf";
@@ -46,14 +46,12 @@ if ($o_help) {
     print "    Default: @@CONFDIR@@/bloonix/server/main.conf\n";
     print "-H, --host <ip>\n";
     print "    The IP address or hostname to check.\n";
-    print "    It's possible to pass a comma separated list of hosts.\n";
     print "-w, --warning <threshold>\n";
-    print "    The threshold is passed to check-ping -w\n";
+    print "    The threshold is passed to 'check-ping --warning'.\n";
     print "-c, --critical <threshold>\n";
-    print "    The threshold is passed to check-ping -c\n";
+    print "    The threshold is passed to 'check-ping --critical'.\n";
     print "-e, --expire <seconds>\n";
-    print "    When the lock file can be deleted after\n";
-    print "    the last creation.\n";
+    print "    When does the maintenance mode expires.\n";
     print "    Default: 600\n";
     print "-L, --logfile <file>\n";
     print "    The logfile to log all operations.\n";
@@ -62,20 +60,17 @@ if ($o_help) {
     print "    Print the help.\n";
     print "-v, --version\n";
     print "    Print the version number.\n\n";
-    print "* Option -H\n\n";
-    print "  Example call:\n\n";
-    print "  $progname -H host-a,host-b\n\n";
-    print "  The hosts are checked in order. At first my-gateway is checked.\n";
-    print "  If the ping to host my-gateway failed then a maintenance file\n";
-    print "  will be created and it's not necessary to check host-a and host-b.\n";
-    print "  If the ping to my-gateway runs without errors then the host-a and\n";
-    print "  host-b will be checked. Please note that if a comma separated list\n";
-    print "  of hosts is set to option -H then the lowest status of the ping\n";
-    print "  checks are decisive. As example if the ping to host-a failed with\n";
-    print "  status CRITICAL and the ping to host-a returns OK, then no\n";
-    print "  maintenance file will be created because the status of host-b is\n";
-    print "  decisive. If the ping to host-a was successful then host-b will\n";
-    print "  be checked because each status higher than OK would be ignored.\n";
+    print "Example usage:\n\n";
+    print "    bloonix-check-for-maintenance \\\\\n";
+    print "        -H a.server.example \\\\\n";
+    print "        -H b.server.example \\\\\n";
+    print "        -H c.server.example \\\\\n";
+    print "        -e 600\n\n";
+    print "This script disables the notification system of Bloonix if\n";
+    print "a ping checks to each host return CRITICAL or UNKNOWN.\n";
+    print "The notification system is enabled again if at least one\n";
+    print "ping check to a host was successful, but first after the\n";
+    print "expire time of 600 seconds.\n";
     print "\n";
     exit 0;
 }
