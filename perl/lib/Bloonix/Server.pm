@@ -1910,7 +1910,7 @@ sub send_sms {
     foreach my $sms_to (keys %{ $self->{sms} }) {
         my $message = "$host->{hostname} $host->{ipaddr}";
         my $sms = $self->{sms}->{$sms_to};
-        my @id  = ();
+        my (@id, $redirect);
 
         # Check here the sms_count again because if more than
         # one contact is configured then the sms counter
@@ -1929,6 +1929,7 @@ sub send_sms {
             $sms = shift @$sms;
             $message .= " - $sms->{service} $sms->{status} - $sms->{message}";
             push @id, $sms;
+            $redirect = $sms->{redirect};
         } else {
             my (%status, @message, @service);
 
@@ -1936,6 +1937,10 @@ sub send_sms {
                 $status{ $sms->{status} }++;
                 push @id, $sms;
                 push @service, $sms->{service};
+
+                if ($sms->{redirect}) {
+                    $redirect = $sms->{redirect};
+                }
             }
 
             foreach my $s (qw/INFO UNKNOWN CRITICAL WARNING OK/) {
@@ -1948,7 +1953,7 @@ sub send_sms {
             $message .= " - " . join(", ", @service);
         }
 
-        if ($sms->{redirect}) {
+        if ($redirect) {
             $message = "RAD: $message";
         }
 

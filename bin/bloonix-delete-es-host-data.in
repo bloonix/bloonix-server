@@ -8,7 +8,7 @@ use Bloonix::REST;
 use Bloonix::Config;
 use base qw(Bloonix::Accessor);
 
-__PACKAGE__->mk_accessors(qw/sla rest json log dbh/);
+__PACKAGE__->mk_accessors(qw/rest json log dbh/);
 __PACKAGE__->run();
 
 sub run {
@@ -35,15 +35,6 @@ sub run {
     $self->{rest} = Bloonix::REST->new(
         $self->{config}->{elasticsearch}
     );
-
-    $self->{sla} = {
-        0 => 3,    # basic package
-        1 => 60,   # old basic package
-        2 => 400,  # basic for featured customers
-        3 => 400,  # advanced package
-        4 => 1900, # pro package
-        5 => 3800  # xxl package
-    };
 
     $self->{json} = JSON->new();
 
@@ -79,14 +70,7 @@ sub disconnect_database {
 sub delete_data {
     my $self = shift;
 
-    my $sth = $self->dbh->prepare(
-        join(" ",
-            "select host.id, host.hostname, host.ipaddr, company.sla",
-            "from host",
-            "inner join company on host.company_id = company.id"
-        )
-    );
-
+    my $sth = $self->dbh->prepare("select id, hostname, ipaddr, data_retention from host");
     $sth->execute;
 
     while (my $host = $sth->fetchrow_hashref) {
@@ -100,15 +84,15 @@ sub delete_data {
 sub delete {
     my ($self, $host) = @_;
 
-    my $time = $self->sla_expire_time($host->{sla});
+    my $time = $self->data_retention_time($host->{data_retention});
 
     $self->log->notice(
         "request data for host $host->{id},",
-        "sla $host->{sla}, time $time"
+        "data retention $host->{data_retention} days, time $time"
     );
 
     my $total = $self->get_total_size($time, $host);
-    $self->log->notice("found $total documents for host $host->{id} sla $host->{sla}");
+    $self->log->notice("found $total documents for host $host->{id} data retention $host->{data_retention}");
 
     if ($total == 0) {
         return;
@@ -194,10 +178,10 @@ sub delete_empty_indices {
     }
 }
 
-sub sla_expire_time {
-    my ($self, $sla) = @_;
+sub data_retention_time {
+    my ($self, $data_retention) = @_;
 
-    my $hold = $self->sla->{$sla} * 86400;
+    my $hold = $data_retention * 86400;
 
     return (time - $hold) * 1000;
 }
