@@ -6,6 +6,7 @@ use JSON;
 use Log::Handler;
 use Bloonix::REST;
 use Bloonix::Config;
+use Getopt::Long qw(:config no_ignore_case);
 use base qw(Bloonix::Accessor);
 
 __PACKAGE__->mk_accessors(qw/rest json log dbh/);
@@ -15,15 +16,56 @@ sub run {
     my $class = shift;
     my $self = bless { }, $class;
 
-    ($self->{type}, $self->{run}) = @ARGV;
+    my $help = 0;
+    $self->{host} = [];
+    $self->{type} = [];
+    $self->{really_delete} = 0;
+    $self->{config_file} = "@@CONFDIR@@/bloonix/server/main.conf";
 
-    if (!$self->{type} || $self->{type} !~ /^(?:stats|event)\z/ || ($self->{run} && $self->{run} ne "run")) {
-        print "Usage: $0 [ stats | event ] [ run ]\n";
-        exit 1;
+    GetOptions(
+        "H|host=s" => $self->{host},
+        "t|type=s" => $self->{type},
+        "r|really-delete" => \$self->{really_delete},
+        "c|config-file=s" => \$self->{config_file},
+        "h|help" => \$help
+    ) or exit 1;
+
+    if ($help) {
+        print "\nUsage: $0 [ OPTIONS ]\n\n";
+        print "Options:\n\n";
+        print "-H, --host <host-id>\n";
+        print "    The host id to delete the data. If no host-id is passed\n";
+        print "    then all hosts are processed.\n";
+        print "-t, --type <stats|event|result>\n";
+        print "    What type of data to delete.\n";
+        print "    By default all data will be deleted.\n";
+        print "-r, --really-delete\n";
+        print "    Set this option if you want to really delete\n";
+        print "    the data. Otherwise only debug messages are print.\n";
+        print "-c, --config-file\n";
+        print "    The configuration file of the bloonix server.\n";
+        print "    Default: @@CONFDIR@@/bloonix/server/main.conf\n";
+        print "-h, --help\n";
+        print "    Print the help.\n";
+        print "\n";
+        exit 0;
     }
 
+    if (!@{$self->{type}}) {
+        push @{$self->{type}}, qw(stats event results);
+    }
+
+    foreach my $type (@{$self->{type}}) {
+        if ($type !~ /^(stats|event|results)\z/) {
+            print "Invalid value for parameter --type\n";
+            exit 1;
+        }
+    }
+
+    $self->{type} = join(",", @{$self->{type}});
+
     $self->{config} = Bloonix::Config->parse(
-        "@@CONFDIR@@/bloonix/server/main.conf"
+        $self->{config_file}
     );
 
     $self->{log} = Log::Handler->new(
@@ -70,8 +112,16 @@ sub disconnect_database {
 sub delete_data {
     my $self = shift;
 
-    my $sth = $self->dbh->prepare("select id, hostname, ipaddr, data_retention from host");
-    $sth->execute;
+    my $stmt = "select id, hostname, ipaddr, data_retention from host";
+    my @bind;
+
+    if (@{$self->{host}}) {
+        $stmt .= " where id in (". join(",", map {"?"} @{$self->{host}}) .")";
+        push @bind, @{$self->{host}};
+    }
+
+    my $sth = $self->dbh->prepare($stmt);
+    $sth->execute(@bind);
 
     while (my $host = $sth->fetchrow_hashref) {
         $self->log->notice("--- start processing host $host->{id} type $self->{type} ---");
@@ -87,12 +137,15 @@ sub delete {
     my $time = $self->data_retention_time($host->{data_retention});
 
     $self->log->notice(
-        "request data for host $host->{id},",
-        "data retention $host->{data_retention} days, time $time"
+        "processing $host->{id} with a data retention of $host->{data_retention} days"
     );
 
     my $total = $self->get_total_size($time, $host);
-    $self->log->notice("found $total documents for host $host->{id} data retention $host->{data_retention}");
+
+    $self->log->notice(
+        "found $total documents for host $host->{id} that are older than",
+        scalar localtime($time/1000)
+    );
 
     if ($total == 0) {
         return;
@@ -106,7 +159,7 @@ sub delete {
             "older than", $self->datestamp($time)
         );
 
-        if (!$self->{run}) {
+        if (!$self->{really_delete}) {
             $self->log->notice("test run - skip deletion");
             next;
         }
@@ -138,7 +191,7 @@ sub delete {
         );
     }
 
-    if (!$self->{run}) {
+    if (!$self->{really_delete}) {
         return;
     }
 
@@ -162,7 +215,7 @@ sub delete_empty_indices {
             $self->log->notice("delete index $index");
             $count++;
 
-            if ($self->{run}) {
+            if ($self->{really_delete}) {
                 $self->rest->delete(path => $index)
                     or die $self->rest->errstr;
             }

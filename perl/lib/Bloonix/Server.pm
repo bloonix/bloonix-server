@@ -33,7 +33,7 @@ __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_serv
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.10";
+our $VERSION = "0.11";
 
 sub run {
     my $class = shift;
