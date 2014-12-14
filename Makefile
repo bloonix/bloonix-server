@@ -8,7 +8,7 @@ build:
 
 	for file in \
 		bin/bloonix-check-for-maintenance \
-		bin/bloonix-count-distinct-es-service-data \
+		bin/bloonix-count-es-service-documents \
 		bin/bloonix-delete-es-host-data \
 		bin/bloonix-get-sms-count \
 		bin/bloonix-roll-forward-log \
@@ -63,7 +63,7 @@ install:
 		bloonix-server \
 		bloonix-srvchk \
 		bloonix-check-for-maintenance \
-		bloonix-count-distinct-es-service-data \
+		bloonix-count-es-service-documents \
 		bloonix-delete-es-host-data \
 		bloonix-get-sms-count \
 		bloonix-roll-forward-log  \

@@ -1,3 +1,14 @@
+bloonix-server (0.11-1) unstable; urgency=low
+
+    * Improved the script to count elasticsearch documents for each
+      service.
+    * Improved script bloonix-delete-es-host-data.
+    * Fixed message formatting for redirected messages.
+    * Improved the interval handling for services in status
+      WARNING, CRITICAL, UNKNOWN and INFO.
+
+ -- Jonny Schulz <js@bloonix.de>  Sun, 14 Dec 2014 18:14:28 +0100
+
 bloonix-server (0.10-1) unstable; urgency=low
 
     * Plugin results are now stored each time and not only

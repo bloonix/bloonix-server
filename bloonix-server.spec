@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.10
+Version: 0.11
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -159,7 +159,7 @@ rm -rf %{buildroot}
 %{_bindir}/bloonix-server
 %{_bindir}/bloonix-srvchk
 %{_bindir}/bloonix-check-for-maintenance
-%{_bindir}/bloonix-count-distinct-es-service-data
+%{_bindir}/bloonix-count-es-service-documents
 %{_bindir}/bloonix-delete-es-host-data
 %{_bindir}/bloonix-get-sms-count
 %{_bindir}/bloonix-roll-forward-log
@@ -184,6 +184,13 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sun Dec 14 2014 Jonny Schulz <js@bloonix.de> - 0.11-1
+- Improved the script to count elasticsearch documents for each
+  service.
+- Improved script bloonix-delete-es-host-data.
+- Fixed message formatting for redirected messages.
+- Improved the interval handling for services in status
+  WARNING, CRITICAL, UNKNOWN and INFO.
 * Fri Dec 05 2014 Jonny Schulz <js@bloonix.de> - 0.10-1
 - Plugin results are now stored each time and not only
   by status switches.
