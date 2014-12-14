@@ -2215,6 +2215,11 @@ sub get_service_flaps_by_time {
     my @indices = $self->get_indices($from_time, $to_time);
     my $index = join(",", @indices);
 
+    if (!$index) {
+        $self->log->error("unable to get elasticsearch indices");
+        return 0;
+    }
+
     $from_time .= "000";
     $to_time .= "000";
 
