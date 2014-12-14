@@ -235,22 +235,34 @@ sub get_services {
         $service->{interval} ||= $self->host->{interval};
         $service->{timeout} ||= $self->host->{timeout};
 
-        # If the check has status info, warning, critical or unknown, a interval
-        # of 60 seconds is forced, but only if the default interval is higher
-        # than 60 seconds. This is necessary for services which have an higher
-        # interval. As example if a service has a interval of ~1 hour, then
-        # attempt_max would be reached after 3 hours. For this reason the interval
-        # is forced to 60 seconds, so attempt_max is reached after ~3 minutes.
+
+        # When a check is forced:
+        #
+        #   - if the interval is exceeded
+        #   - if a check is forced over the webgui
+        #   - if the status is WARNING|CRITICAL|UNKNOWN
+        #
+        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is between
+        # 60 and 43200 seconds, then a interval of 60 seconds is forced.
+        #
+        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is higher than
+        # or equal 43200 seconds, then a interval of 300 seconds is forced.
 
         if ($service->{force_check}) {
             $self->log->info("service $service->{service_id} check forced");
             $self->db->disable_force_check($service->{service_id});
             push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} > 60 && $service->{last_check} + 60 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
         } elsif ($service->{last_check} + $service->{interval} <= $self->etime) {
             $self->log->info("service $service->{service_id} is ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 60 && $service->{interval} < 43200 && $service->{last_check} + 60 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $$service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 86400 && $service->{last_check} + 600 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
             push @services, $service;
         } else {
             $self->log->info("service $service->{service_id} is not ready");

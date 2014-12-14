@@ -1,9 +1,11 @@
-bloonix-server (0.11) released at 2014-XX-XX
+bloonix-server (0.11) released at 2014-12-14
 
-    * Improved script to count elasticsearch documents for each
+    * Improved the script to count elasticsearch documents for each
       service.
     * Improved script bloonix-delete-es-host-data.
     * Fixed message formatting for redirected messages.
+    * Improved the interval handling for services in status
+      WARNING, CRITICAL, UNKNOWN and INFO.
 
 bloonix-server (0.10) released at 2014-12-05
 
