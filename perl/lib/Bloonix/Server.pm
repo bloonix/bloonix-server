@@ -258,7 +258,7 @@ sub get_services {
         } elsif ($service->{status} ne "OK" && $service->{interval} >= 60 && $service->{interval} < 43200 && $service->{last_check} + 60 <= $self->etime) {
             $self->log->info("service $service->{service_id} forced to be ready");
             push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $$service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
             $self->log->info("service $service->{service_id} forced to be ready");
             push @services, $service;
         } elsif ($service->{status} ne "OK" && $service->{interval} >= 86400 && $service->{last_check} + 600 <= $self->etime) {
