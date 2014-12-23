@@ -573,7 +573,7 @@ sub validate_data {
     CHECK:
     foreach my $service_id (keys %$data) {
         if ($service_id !~ /^\w+\z/ || !exists $services->{$service_id}) {
-            $self->log->info("invalid service id '$service_id'");
+            $self->log->error("invalid service id '$service_id'");
             delete $data->{$service_id};
             next CHECK;
         }
@@ -581,7 +581,9 @@ sub validate_data {
         my $n_service = $data->{$service_id};
         my $c_service = $services->{$service_id};
 
-        if (ref($n_service) ne "HASH") {
+        if (ref $n_service ne "HASH") {
+            $self->log->error("invalid data structure received for service id $service_id");
+            $self->log->dump(error => $n_service);
             $data->{$service_id} = {
                 status => "UNKNOWN",
                 message => "invalid data structure received for service id $service_id",
@@ -591,6 +593,7 @@ sub validate_data {
 
         foreach my $key (qw/status message/) {
             if (!defined $n_service->{$key}) {
+                $self->log->error("missing mandatory key '$key' for service id $service_id");
                 $data->{$service_id} = {
                     status => "UNKNOWN",
                     message => "missing mandatory key '$key' for service id $service_id",
@@ -599,6 +602,7 @@ sub validate_data {
             }
 
             if (ref $n_service->{$key}) {
+                $self->log->error("invalid data struct for key '$key' for service id $service_id");
                 $data->{$service_id} = {
                     status => "UNKNOWN",
                     message => "invalid data struct for key '$key' for service id $service_id",
