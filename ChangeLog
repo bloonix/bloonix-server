@@ -2,6 +2,7 @@ bloonix-server (0.12) released at 2014-12-23
 
     * Fixed status switches from warning to critical if attempt max
       is reached.
+    * Fixed nagios-wrapper/simple-wrapper handling.
 
 bloonix-server (0.11) released at 2014-12-14
 

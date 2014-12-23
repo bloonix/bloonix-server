@@ -235,7 +235,6 @@ sub get_services {
         $service->{interval} ||= $self->host->{interval};
         $service->{timeout} ||= $self->host->{timeout};
 
-
         # When a check is forced:
         #
         #   - if the interval is exceeded
@@ -347,6 +346,21 @@ sub process_get_request {
                         foreach my $location (@{$location_options->{locations}}) {
                             if ($self->locations->{$location}) {
                                 push @{$service->{location_options}->{locations}}, $self->locations->{$location};
+                            }
+                        }
+                    }
+                }
+            }
+
+            # Backward compability for older agents. simple-wrapper is available since 0.41.
+            if ($service->{command} eq "check-simple-wrapper") {
+                if ($self->request->{version} =~ /^0\.([0123]\d|40)\z/) {
+                    $service->{command} = "check-nagios-wrapper";
+                    my $opts = $service->{command_options};
+                    if ($opts) {
+                        foreach my $opt (@$opts) {
+                            if ($opt->{option} eq "simple-command") {
+                                $opt->{option} = "nagios-command";
                             }
                         }
                     }

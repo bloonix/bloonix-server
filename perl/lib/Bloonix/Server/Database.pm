@@ -351,16 +351,22 @@ sub get_active_host_services {
             table => [
                 service => [ "id AS service_id", qw(agent_version last_status last_check status updated force_check) ],
                 service_parameter => [qw(
-                    agent_id command command_options
+                    agent_id command_options
                     location_options agent_options host_alive_check
                     interval timeout host_template_id
-                )]
+                )],
+                plugin => [qw(command) ]
             ],
             join => [
                 inner => {
                     table => "service_parameter",
                     left => "service.service_parameter_id",
                     right => "service_parameter.ref_id"
+                },
+                inner => {
+                    table => "plugin",
+                    left => "service_parameter.plugin_id",
+                    right => "plugin.id"
                 },
                 inner => {
                     table => "host",
