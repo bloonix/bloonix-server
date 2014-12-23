@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.11
+Version: 0.12
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -184,6 +184,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Dec 23 2014 Jonny Schulz <js@bloonix.de> - 0.12-1
+- Fixed status switches from warning to critical if attempt max
+  is reached.
 * Sun Dec 14 2014 Jonny Schulz <js@bloonix.de> - 0.11-1
 - Improved the script to count elasticsearch documents for each
   service.
