@@ -395,8 +395,6 @@ sub get_timed_out_host_services {
                 "or (service_parameter.interval > 0 and service_parameter.timeout = 0 and service.last_check + service_parameter.interval + host.timeout <= ?)",
                 "or (service_parameter.interval = 0 and service_parameter.timeout > 0 and service.last_check + host.interval + service_parameter.timeout <= ?)",
                 "or (service_parameter.interval = 0 and service_parameter.timeout = 0 and service.last_check + host.interval + host.timeout <= ?)",
-                #"(service_parameter.interval > 0 and service.last_check + service_parameter.interval + service_parameter.timeout <= ?)",
-                #"or (service_parameter.interval = 0 and service.last_check + host.interval + host.timeout <= ?)",
             ")",
             "order by service.next_check_timeout asc",
             "limit 1",
@@ -416,8 +414,6 @@ sub get_timed_out_host_services {
             "or (service_parameter.interval > 0 and service_parameter.timeout = 0 and service.last_check + service_parameter.interval + host.timeout <= ?)",
             "or (service_parameter.interval = 0 and service_parameter.timeout > 0 and service.last_check + host.interval + service_parameter.timeout <= ?)",
             "or (service_parameter.interval = 0 and service_parameter.timeout = 0 and service.last_check + host.interval + host.timeout <= ?)",
-            #"(service_parameter.interval > 0 and service.last_check + service_parameter.interval + service_parameter.timeout <= ?)",
-            #"or (service_parameter.interval = 0 and service.last_check + host.interval + host.timeout <= ?)",
         ")"
     );
 

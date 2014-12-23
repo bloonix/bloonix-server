@@ -810,7 +810,7 @@ sub check_services {
                 if ($c_service->{attempt_counter} == $c_service->{attempt_max}) {
                     if ($c_service->{attempt_warn2crit} == 1) {
                         $self->log->notice("attempt_max exceeded, status critical");
-                        $n_status = "CRITICAL";
+                        $n_service->{status} = $n_status = "CRITICAL";
                     }
                 }
             }
