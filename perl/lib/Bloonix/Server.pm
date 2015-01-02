@@ -765,55 +765,70 @@ sub check_services {
         }
 
         # Just some short variables
-        my $is_volatile     = $c_service->{is_volatile};
-        my $volatile_status = $c_service->{volatile_status};
+        my $is_volatile = $c_service->{is_volatile}; # is this a volatile status?
+        my $volatile_status = $c_service->{volatile_status}; # has become the service volatile?
         my $volatile_retain = $c_service->{volatile_retain};
-        my $volatile_since  = $c_service->{volatile_since};
-        my $volatile_time   = $volatile_retain + $volatile_since;
+        my $volatile_since = $c_service->{volatile_since};
+        my $volatile_time = $volatile_retain + $volatile_since;
 
-        # Determine if attempt_counter reached attempt_max and
-        # set the status to CRITICAL.
-        if ($n_status eq "OK") {
-            if ($is_volatile && $volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
-                $self->log->info("unable to set the status to OK because service is in volatile status");
-                push @event_tags, "volatile";
-                $status{volatile_status} = 1;
-            } else {
-                if ($volatile_status) {
-                    $status{volatile_status} = 0;
-                }
-
-                if ($volatile_since) {
-                    $status{volatile_since}  = 0;
-                }
-
-                if ($c_service->{attempt_counter} > 1) {
-                    $status{attempt_counter} = 1;
-                }
-
-                if ($c_service->{last_mail} > 0) {
-                    $status{last_mail} = 0;
-                }
-
-                if ($c_service->{last_sms} > 0) {
-                    $status{last_sms}  = 0;
-                }
-
-                if ($c_service->{acknowledged} == 1) {
-                    $status{acknowledged} = 0;
-                }
-
-                if ($c_service->{status_dependency_matched} > 0) {
-                    $status{status_dependency_matched} = 0;
-                }
-            }
-        } elsif ($n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
-            if ($is_volatile) {
+        # If the status is not OK and if the volatile_status flag is not set
+        if ($n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
+            if ($is_volatile && !$volatile_status) {
                 $self->log->info("set service in volatile status since", $self->etime);
                 $status{volatile_status} = 1;
                 $status{volatile_since} = $self->etime;
             }
+        }
 
+        # If the volatile_status flag is set and the retain time is not expired
+        if ($is_volatile && $volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
+            $self->log->info("unable to set the status to OK because service is in volatile status");
+            push @event_tags, "volatile";
+            $status{volatile_status} = 1;
+        }
+
+        # Manipulate the volatile status because the status must be hold
+        if ($status{volatile_status}) {
+            if ($self->statbyprio->{$n_status} < $self->statbyprio->{$c_status}) {
+                $self->log->info("overwrite service status from $n_status to volatile status $c_status");
+                $status{status} = $n_service->{status} = $n_status = $c_status;
+            }
+            $status{message} = "[VOLATILE] $status{message}";
+        }
+
+        # Check if the status is OK and reset some parameter
+        if ($n_status eq "OK") {
+            if ($volatile_status) {
+                $status{volatile_status} = 0;
+            }
+
+            if ($volatile_since) {
+                $status{volatile_since}  = 0;
+            }
+
+            if ($c_service->{attempt_counter} > 1) {
+                $status{attempt_counter} = 1;
+            }
+
+            if ($c_service->{last_mail} > 0) {
+                $status{last_mail} = 0;
+            }
+
+            if ($c_service->{last_sms} > 0) {
+                $status{last_sms}  = 0;
+            }
+
+            if ($c_service->{acknowledged} == 1) {
+                $status{acknowledged} = 0;
+            }
+
+            if ($c_service->{status_dependency_matched} > 0) {
+                $status{status_dependency_matched} = 0;
+            }
+        }
+
+        # Check if the status is WARNING, CRITICAL or UNKNOWN
+        if ($n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
             if ($c_service->{attempt_counter} == $c_service->{attempt_max}) {
                 $self->attempt_max_reached->{$service_id} = 1;
             } elsif ($c_service->{attempt_counter} > $c_service->{attempt_max}) {
@@ -832,16 +847,6 @@ sub check_services {
                     }
                 }
             }
-        }
-
-        # Manipulate the volatile status because the status must be hold!
-        if ($status{volatile_status} && $self->statbyprio->{$n_status} < $self->statbyprio->{$c_status}) {
-            $self->log->info("overwrite service status from $n_status to volatile status $c_status");
-            $status{status} = $n_service->{status} = $n_status = $c_status;
-        }
-
-        if ($status{volatile_status}) {
-            $status{message} = "[VOLATILE] $status{message}";
         }
 
         # At first check if the service flaps between states.

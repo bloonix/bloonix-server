@@ -1,3 +1,7 @@
+bloonix-server (0.13) released at 2015-01-02
+
+    * Fixed volatile handling if max attempt is higher than 1.
+
 bloonix-server (0.12) released at 2014-12-23
 
     * Fixed status switches from warning to critical if attempt max
