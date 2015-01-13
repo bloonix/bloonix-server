@@ -17,7 +17,6 @@ Requires: bloonix-agent
 Requires: bloonix-core
 Requires: bloonix-dbi
 Requires: bloonix-fcgi
-Requires: postfix
 Requires: perl-JSON-XS
 Requires: perl(DBI)
 Requires: perl(DBD::Pg)
