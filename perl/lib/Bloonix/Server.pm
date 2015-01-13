@@ -37,7 +37,8 @@ our $VERSION = "0.14";
 
 sub run {
     my $class = shift;
-
+    my $opts = Bloonix::Server::Validate->argv(@_);
+    my $self = bless $opts, $class;
 
     $self->init;
     $self->fcgi(Bloonix::FCGI->new($self->config->{proc_manager}));

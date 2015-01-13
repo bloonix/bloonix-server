@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.13
+Version: 0.14
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -183,6 +183,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Jan 13 2015 Jonny Schulz <js@bloonix.de> - 0.14-1
+- Kicked dependency postfix.
 * Fri Jan 02 2015 Jonny Schulz <js@bloonix.de> - 0.13-1
 - Fixed volatile handling if max attempt is higher than 1.
 * Tue Dec 23 2014 Jonny Schulz <js@bloonix.de> - 0.12-1
