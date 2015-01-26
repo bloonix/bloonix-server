@@ -312,6 +312,8 @@ sub update_hosts {
 
     if ($ipaddr =~ /^(localhost|127.0.0.1)\z/) {
         system("mv /var/tmp/bloonix-agent-hosts.conf /etc/bloonix/agent/conf.d/hosts.conf");
+        system("chown root:bloonix /etc/bloonix/agent/conf.d/hosts.conf");
+        system("chmod 640 /etc/bloonix/agent/conf.d/hosts.conf");
         system("/etc/init.d/bloonix-agent reload");
         return;
     }
@@ -343,7 +345,7 @@ sub update_hosts {
 
     $self->sshexec(
         "system",
-        "chown bloonix:bloonix /etc/bloonix/agent/conf.d/hosts.temp"
+        "chown root:bloonix /etc/bloonix/agent/conf.d/hosts.temp"
     ) or die "unable to chown host config";
 
     $self->sshexec(
