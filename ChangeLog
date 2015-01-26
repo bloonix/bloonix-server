@@ -1,3 +1,8 @@
+bloonix-server (0.15) released at 2015-XX-XX
+
+    * Fixed permissions of hosts.conf that is generated
+      by bloonix-update-agent-host-config.
+
 bloonix-server (0.14) released at 2015-01-13
 
     * Kicked dependency postfix.
