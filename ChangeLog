@@ -1,4 +1,4 @@
-bloonix-server (0.15) released at 2015-XX-XX
+bloonix-server (0.15) released at 2015-01-26
 
     * Fixed permissions of hosts.conf that is generated
       by bloonix-update-agent-host-config.
