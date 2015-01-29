@@ -119,6 +119,7 @@ if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" 
 fi
 
 %preun
+if [ $1 -eq 0 ]; then
 %if %{?with_systemd}
 systemctl --no-reload disable bloonix-srvchk.service
 systemctl stop bloonix-srvchk.service
@@ -126,13 +127,12 @@ systemctl --no-reload disable bloonix-server.service
 systemctl stop bloonix-server.service
 systemctl daemon-reload
 %else
-if [ $1 -eq 0 ]; then
-    /sbin/service bloonix-srvchk stop &>/dev/null || :
-    /sbin/service bloonix-server stop &>/dev/null || :
-    /sbin/chkconfig --del bloonix-srvchk
-    /sbin/chkconfig --del bloonix-server
-fi
+/sbin/service bloonix-srvchk stop &>/dev/null || :
+/sbin/service bloonix-server stop &>/dev/null || :
+/sbin/chkconfig --del bloonix-srvchk
+/sbin/chkconfig --del bloonix-server
 %endif
+fi
 
 %clean
 rm -rf %{buildroot}
