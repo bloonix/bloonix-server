@@ -1,3 +1,7 @@
+bloonix-server (0.16) released at 2015-01-29
+
+    * Fixed redirect section and kicked sms_to.
+
 bloonix-server (0.15) released at 2015-01-26
 
     * Fixed permissions of hosts.conf that is generated

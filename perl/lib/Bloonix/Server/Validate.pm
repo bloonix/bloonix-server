@@ -97,19 +97,19 @@ sub email {
     my %opts = Params::Validate::validate(@_, {
         sendmail => {
             type => Params::Validate::SCALAR,
-            default => "/usr/sbin/sendmail -t -oi -oem",
+            default => "/usr/sbin/sendmail -t -oi -oem"
         },
         from => {
             type => Params::Validate::SCALAR,
-            default => 'bloonix@localhost',
+            default => 'bloonix@localhost'
         },
         bcc => {
             type => Params::Validate::SCALAR,
-            optional => 1,
+            optional => 1
         },
         subject => {
             type => Params::Validate::SCALAR,
-            default => "*** STATUS %s FOR %h (%a) ***",
+            default => "*** STATUS %s FOR %h (%a) ***"
         },
     });
 
@@ -121,11 +121,11 @@ sub smsgateway {
 
     my %opts = Params::Validate::validate(@_, {
         command => {
-            type => Params::Validate::SCALAR,
+            type => Params::Validate::SCALAR
         },
         response => {
             type => Params::Validate::SCALAR,
-            default => "",
+            default => ""
         }
     });
 
@@ -138,17 +138,16 @@ sub redirect_remote_agent_timeouts {
     my %opts = Params::Validate::validate(@_, {
         sms_to => {
             type => Params::Validate::SCALAR,
-            default => "",
+            default => ""
         },
         mail_to => {
             type => Params::Validate::SCALAR,
-            default => "",
+            default => ""
         }
     });
 
-    if ($opts{resp}) {
-        $opts{response} = $opts{resp};
-    }
+    # deprecated
+    delete $opts{sms_to};
 
     return \%opts;
 }
@@ -227,12 +226,12 @@ sub argv {
     my %opts = Params::Validate::validate(@_, {
         config_file => {
             type => Params::Validate::SCALAR,
-            default => "/etc/bloonix/server/main.conf",
+            default => "/etc/bloonix/server/main.conf"
         },
         pid_file => {
             type => Params::Validate::SCALAR,
-            default => "/var/run/bloonix/bloonix-server.pid",
-        },
+            default => "/var/run/bloonix/bloonix-server.pid"
+        }
     });
 
     return \%opts;

@@ -1,7 +1,7 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.15
-Release: 2%{dist}
+Version: 0.16
+Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
 Distribution: RHEL and CentOS
@@ -184,6 +184,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Thu Jan 29 2015 Jonny Schulz <js@bloonix.de> - 0.16-1
+- Fixed redirect section and kicked sms_to.
 * Thu Jan 29 2015 Jonny Schulz <js@bloonix.de> - 0.15-2
 - Fixed %preun.
 * Mon Jan 26 2015 Jonny Schulz <js@bloonix.de> - 0.15-1

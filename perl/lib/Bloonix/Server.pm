@@ -1339,42 +1339,27 @@ sub check_if_downtime_is_active {
 
 sub check_if_srvchk_remote_error {
     my $self = shift;
+    my $host = $self->host;
+    my $redirect_config = $self->config->{redirect_remote_agent_timeouts};
 
-    if ($self->whoami ne "srvchk" || $self->c_service->{agent_id} ne "remote" || !$self->config->{redirect_remote_agent_timeouts}) {
+    if ($self->whoami ne "srvchk" || $self->c_service->{agent_id} ne "remote" || !$redirect_config->{mail_to}) {
         return 0;
     }
 
-    $self->log->notice("service", $self->service_id, "timed out, redirect sms and email");
+    $self->log->notice("service", $self->service_id, "timed out, redirect notification");
+    $self->log->notice("redirect notification for service", $self->service_id, "to $redirect_config->{mail_to}");
 
-    my $redirect_config = $self->config->{redirect_remote_agent_timeouts};
-    my $host = $self->host;
-
-    if ($redirect_config->{mail_to}) {
-        $self->log->notice("redirect notification for service", $self->service_id, "to $redirect_config->{mail_to}");
-        $self->save_mail(
-            service_id => $self->service_id,
-            service => $self->c_service->{service_name},
-            status => $self->n_service->{status},
-            message => $self->n_service->{message},
-            mail_to => $redirect_config->{mail_to},
-            description => $self->c_service->{description},
-            comment => $self->c_service->{comment},
-            escalation => "-1",
-            redirect => 1
-        );
-    }
-
-    #if ($redirect_config->{sms_to}) {
-    #    $self->log->notice("redirect notification for service", $self->service_id, "to $redirect_config->{sms_to}");
-    #    $self->save_sms(
-    #        service_id => $self->service_id,
-    #        service => $self->c_service->{service_name},
-    #        status => $self->n_service->{status},
-    #        message => $self->n_service->{message},
-    #        sms_to => $redirect_config->{sms_to},
-    #        redirect => 1
-    #    );
-    #}
+    $self->save_mail(
+        service_id => $self->service_id,
+        service => $self->c_service->{service_name},
+        status => $self->n_service->{status},
+        message => $self->n_service->{message},
+        mail_to => $redirect_config->{mail_to},
+        description => $self->c_service->{description},
+        comment => $self->c_service->{comment},
+        escalation => "-1",
+        redirect => 1
+    );
 
     my %status = (
         status => "WARNING",
