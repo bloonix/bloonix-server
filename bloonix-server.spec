@@ -1,7 +1,7 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
 Version: 0.15
-Release: 1%{dist}
+Release: 2%{dist}
 License: Commercial
 Group: Utilities/System
 Distribution: RHEL and CentOS
@@ -184,6 +184,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Thu Jan 29 2015 Jonny Schulz <js@bloonix.de> - 0.15-2
+- Fixed %preun.
 * Mon Jan 26 2015 Jonny Schulz <js@bloonix.de> - 0.15-1
 - Fixed permissions of hosts.conf that is generated
   by bloonix-update-agent-host-config.
