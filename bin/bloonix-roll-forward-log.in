@@ -52,7 +52,7 @@ while (my $line = <$in>) {
     $i++; print "processing line $i\r";
     print $i, "\r";
     my $req = $json->decode($line);
-    &typecast($req->{data});
+    #&typecast($req->{data});
     if (!$rest->post(%$req)) {
         print $out $line;
         $out->sync;
@@ -77,7 +77,7 @@ sub typecast {
         foreach my $key (keys %$data) {
             if (ref $data->{$key} eq "HASH") {
                 &typecast($data->{$key});
-            } elsif ($data->{$key} =~ /^\d+(\.\d+){0,1}\z/) {
+            } elsif (defined $data->{$key} && $data->{$key} =~ /^\d+(\.\d+){0,1}\z/) {
                 $data->{$key} += 0;
             }
         }
