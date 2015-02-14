@@ -1,6 +1,7 @@
 bloonix-server (0.17) released at 2015-XX-XX
 
     * Removed typecasting in bloonix-roll-forward-log.
+    * Transfer the database configuration to /etc/bloonix/database/main.conf.
 
 bloonix-server (0.16) released at 2015-01-29
 

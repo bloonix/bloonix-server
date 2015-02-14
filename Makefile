@@ -79,6 +79,9 @@ install:
 	./install-sh -d -m 0755 $(USRLIBDIR)/bloonix/etc/srvchk;
 	./install-sh -c -m 0644 etc/bloonix/srvchk/main.conf $(USRLIBDIR)/bloonix/etc/srvchk/main.conf;
 
+	./install-sh -d -m 0755 $(USRLIBDIR)/bloonix/etc/database;
+	./install-sh -c -m 0644 etc/bloonix/database/main.conf $(USRLIBDIR)/bloonix/etc/database/server-main.conf;
+
 	./install-sh -d -m 0755 $(USRLIBDIR)/bloonix/etc/init.d;
 	./install-sh -c -m 0755 etc/init/bloonix-server $(USRLIBDIR)/bloonix/etc/init.d/bloonix-server;
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk $(USRLIBDIR)/bloonix/etc/init.d/bloonix-srvchk;
@@ -104,6 +107,9 @@ install:
 		fi; \
 		if test ! -e "$(CONFDIR)/bloonix/srvchk/main.conf" ; then \
 			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/srvchk/main.conf $(CONFDIR)/bloonix/srvchk/main.conf; \
+		fi; \
+		if test ! -e "$(CONFDIR)/bloonix/database/main.conf" ; then \
+			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/database/main.conf $(CONFDIR)/bloonix/database/main.conf; \
 		fi; \
 	fi;
 

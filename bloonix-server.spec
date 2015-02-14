@@ -114,6 +114,15 @@ if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
     chmod 640 /etc/bloonix/srvchk/main.conf
 fi
 
+if [ ! -e "/etc/bloonix/database/main.conf" ] ; then
+    mkdir -p /etc/bloonix/database
+    chown root:root /etc/bloonix /etc/bloonix/database
+    chmod 755 /etc/bloonix /etc/bloonix/database
+    cp -a /usr/lib/bloonix/etc/database/server-main.conf /etc/bloonix/database/main.conf
+    chown root:bloonix /etc/bloonix/database/main.conf
+    chmod 640 /etc/bloonix/database/main.conf
+fi
+
 if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" ] ; then
     install -c -m 0644 /usr/lib/bloonix/etc/server/nginx.conf /etc/nginx/conf.d/bloonix-server.conf
 fi
