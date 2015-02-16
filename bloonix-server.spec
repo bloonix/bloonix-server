@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.18
+Version: 0.19
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -195,6 +195,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Feb 16 2015 Jonny Schulz <js@bloonix.de> - 0.19-1
+- Kicked sth_cache_enabled from database config.
 * Mon Feb 16 2015 Jonny Schulz <js@bloonix.de> - 0.18-1
 - Add parameter sth_cache_enabled to the database config.
 * Sat Feb 14 2015 Jonny Schulz <js@bloonix.de> - 0.17-1

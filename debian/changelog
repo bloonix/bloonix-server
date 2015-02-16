@@ -1,3 +1,9 @@
+bloonix-server (0.19-1) unstable; urgency=low
+
+    * Kicked sth_cache_enabled from database config.
+
+ -- Jonny Schulz <js@bloonix.de>  Mon, 16 Feb 2015 04:25:38 +0100
+
 bloonix-server (0.18-1) unstable; urgency=low
 
     * Add parameter sth_cache_enabled to the database config.
