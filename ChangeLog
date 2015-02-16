@@ -1,4 +1,8 @@
-bloonix-server (0.17) released at 2015-XX-XX
+bloonix-server (0.18) released at 2015-02-16
+
+    * Add parameter sth_cache_enabled to the database config.
+
+bloonix-server (0.17) released at 2015-02-14
 
     * Removed typecasting in bloonix-roll-forward-log.
     * Transfer the database configuration to /etc/bloonix/database/main.conf.

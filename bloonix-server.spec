@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.16
+Version: 0.17
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -156,6 +156,8 @@ rm -rf %{buildroot}
 %{blxdir}/etc/server/nginx.conf
 %dir %attr(0755, root, root) %{blxdir}/etc/srvchk
 %{blxdir}/etc/srvchk/main.conf
+%dir %attr(0755, root, root) %{blxdir}/etc/database
+%{blxdir}/etc/database/server-main.conf
 %dir %attr(0755, root, root) %{blxdir}/etc/systemd
 %{blxdir}/etc/systemd/bloonix-server.service
 %{blxdir}/etc/systemd/bloonix-srvchk.service
@@ -193,6 +195,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sat Feb 14 2015 Jonny Schulz <js@bloonix.de> - 0.17-1
+- Removed typecasting in bloonix-roll-forward-log.
+- Transfer the database configuration to /etc/bloonix/database/main.conf.
 * Thu Jan 29 2015 Jonny Schulz <js@bloonix.de> - 0.16-1
 - Fixed redirect section and kicked sms_to.
 * Thu Jan 29 2015 Jonny Schulz <js@bloonix.de> - 0.15-2

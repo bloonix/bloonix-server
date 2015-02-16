@@ -1,3 +1,10 @@
+bloonix-server (0.17-1) unstable; urgency=low
+
+    * Removed typecasting in bloonix-roll-forward-log.
+    * Transfer the database configuration to /etc/bloonix/database/main.conf.
+
+ -- Jonny Schulz <js@bloonix.de>  Sat, 14 Feb 2015 22:14:43 +0100
+
 bloonix-server (0.16-1) unstable; urgency=low
 
     * Fixed redirect section and kicked sms_to.
