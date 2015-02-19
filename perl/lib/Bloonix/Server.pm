@@ -159,7 +159,7 @@ sub check_request {
     $self->log->notice("check authorization");
 
     if (!$self->cgi->postdata) {
-        $self->log->error("no post data received");
+        $self->log->warning("no post data received");
         $self->response({ status => "err", message => "no post data received" });
         return undef;
     }
