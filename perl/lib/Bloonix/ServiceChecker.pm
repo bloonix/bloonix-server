@@ -182,6 +182,10 @@ sub set_sigs {
         }
     };
 
+    $SIG{__DIE__} = sub {
+        $self->log->error(@_);
+    };
+
     # Handle signal CHLD to reap all died children.
     $SIG{CHLD} = sub {
         $self->sig_child_handler(@_);

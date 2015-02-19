@@ -33,7 +33,7 @@ __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_serv
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.19";
+our $VERSION = "0.20";
 
 sub run {
     my $class = shift;
@@ -1764,6 +1764,27 @@ sub store_stats {
             next;
         }
 
+        if ($plugin_id == 59) {
+            foreach my $key (keys %$stats) {
+                if (
+                    $key !~ /^[^\s]+\z/
+                    || ref $stats->{$key}
+                    || !defined $stats->{$key}
+                    || $stats->{$key} !~ /^\d+(\.\d+){0,1}(s|us|ms|%|[YZEPTGMK]{0,1}B|c){0,1}\z/
+                ) {
+                    delete $stats->{$key}
+                }
+            }
+            if (scalar keys %$stats) {
+                $self->save_stats(
+                    service_id => $service_id,
+                    plugin_id => $plugin_id,
+                    data => $stats
+                );
+            }
+            next;
+        }
+
         # Invalid statistic format
         if (ref $stats ne "HASH") {
             $self->log->info("invalid statistic format received for service id $service_id");
@@ -1827,6 +1848,7 @@ sub rest_post {
 
     if (!$self->rest->post(@_)) {
         $self->log->error($self->rest->errstr);
+        $self->log->dump(error => \%request);
         $self->tlog->log(message => $self->json->encode(\%request) ."\n");
     }
 }
