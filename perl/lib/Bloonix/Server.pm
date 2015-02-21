@@ -662,6 +662,12 @@ sub check_services {
         my $n_service  = $data->{$service_id};
         my $c_service  = $services->{$service_id};
 
+        # MAINTENANCE
+        if ($self->maintenance && $n_service->{status} ne "OK") {
+            $n_service->{message} = "[MAINTENANCE (true status: $n_service->{status})] $n_service->{message}";
+            $n_service->{status} = "INFO";
+        }
+
         # Service informations
         my $n_status = $n_service->{status}; # new status
         my $c_status = $c_service->{status}; # current status

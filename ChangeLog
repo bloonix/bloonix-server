@@ -6,6 +6,8 @@ bloonix-server (0.20) released at 2015-XX-XX
     * Path /srv/bloonix/server removed.
     * bloonix-roll-forward-log can now be executed as user bloonix
       and user root.
+    * Force the status INFO for all services which are not OK
+      if maintenance mode is active.
 
 bloonix-server (0.19) released at 2015-02-16
 
