@@ -8,7 +8,6 @@
 #    location / {
 #        expires off;
 #        include /etc/nginx/fastcgi_params;
-#        root @@SRVDIR@@/bloonix/server;
 #        fastcgi_pass 127.0.0.1:9001;
 #    }
 #

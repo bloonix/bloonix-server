@@ -3,6 +3,7 @@ bloonix-server (0.20) released at 2015-XX-XX
     * Nagios stats can now be parsed and stored.
     * ServiceChecker now except __DIE__.
     * Level of message 'no postdata received' changed to warning.
+    * Path /srv/bloonix/server removed.
 
 bloonix-server (0.19) released at 2015-02-16
 
