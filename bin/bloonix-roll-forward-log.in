@@ -3,14 +3,11 @@ use strict;
 use warnings;
 use Bloonix::Config;
 use Bloonix::REST;
+use Bloonix::SwitchUser;
 use IO::Handle;
 use JSON;
 
-my $id = qx{id};
-if ($id !~ /bloonix/) {
-    print "Please run this script as user bloonix!\n";
-    exit 1;
-}
+Bloonix::SwitchUser->("bloonix");
 
 $SIG{HUP} = $SIG{INT} = $SIG{TERM} = "IGNORE";
 

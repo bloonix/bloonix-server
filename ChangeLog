@@ -4,6 +4,8 @@ bloonix-server (0.20) released at 2015-XX-XX
     * ServiceChecker now except __DIE__.
     * Level of message 'no postdata received' changed to warning.
     * Path /srv/bloonix/server removed.
+    * bloonix-roll-forward-log can now be executed as user bloonix
+      and user root.
 
 bloonix-server (0.19) released at 2015-02-16
 
