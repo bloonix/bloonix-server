@@ -60,7 +60,7 @@ sub run {
 
             if ($cgi->path_info eq "/ping") {
                 $self->response({ status => "ok", message => "pong" });
-            } elsif ($cgi->path_info =~ m!^/hostcheck/([1-9]\d*?)\.([^\s]+)\z!) {
+            } elsif ($cgi->path_info =~ m!^/hostcheck/(.+)\.([^\s.]+)\z!) {
                 $self->process_host_check($1, $2);
             } else {
                 $self->process_request;
@@ -142,7 +142,12 @@ sub init_math_objects {
 sub process_host_check {
     my ($self, $host_id, $password) = @_;
 
-    my $host = $self->db->check_host($host_id, $password);
+    my $host = $self->db->get_host_by_auth(
+        $host_id,
+        $password,
+        $self->peerhost,
+        $self->config->{allow_from}
+    );
 
     if ($host) {
         $self->log->warning("hostcheck from", $self->cgi->remote_addr, "for host $host_id was successful");
