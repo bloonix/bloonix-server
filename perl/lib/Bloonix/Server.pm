@@ -45,7 +45,6 @@ sub run {
     $self->log->notice("bloonix server started");
 
     while (my $cgi = $self->fcgi->accept) {
-        next unless $cgi;
         $self->cgi($cgi);
 
         eval {
