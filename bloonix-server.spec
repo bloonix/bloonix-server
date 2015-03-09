@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.19
+Version: 0.20
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -195,6 +195,15 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Mar 09 2015 Jonny Schulz <js@bloonix.de> - 0.20-1
+- Nagios stats can now be parsed and stored.
+- ServiceChecker now except __DIE__.
+- Level of message 'no postdata received' changed to warning.
+- Path /srv/bloonix/server removed.
+- bloonix-roll-forward-log can now be executed as user bloonix
+  and user root.
+- Force the status INFO for all services which are not OK
+  if maintenance mode is active.
 * Mon Feb 16 2015 Jonny Schulz <js@bloonix.de> - 0.19-1
 - Kicked sth_cache_enabled from database config.
 * Mon Feb 16 2015 Jonny Schulz <js@bloonix.de> - 0.18-1
