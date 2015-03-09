@@ -1,4 +1,4 @@
-bloonix-server (0.20) released at 2015-XX-XX
+bloonix-server (0.20) released at 2015-03-09
 
     * Nagios stats can now be parsed and stored.
     * ServiceChecker now except __DIE__.
