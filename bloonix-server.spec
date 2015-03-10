@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.20
+Version: 0.21
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -195,6 +195,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Mar 10 2015 Jonny Schulz <js@bloonix.de> - 0.21-1
+- Service and host actions (active, notification, acknowlegded)
+  will now all reported.
 * Mon Mar 09 2015 Jonny Schulz <js@bloonix.de> - 0.20-1
 - Nagios stats can now be parsed and stored.
 - ServiceChecker now except __DIE__.

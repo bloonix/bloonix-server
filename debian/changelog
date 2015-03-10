@@ -1,3 +1,10 @@
+bloonix-server (0.21-1) unstable; urgency=low
+
+    * Service and host actions (active, notification, acknowlegded)
+      will now all reported.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 10 Mar 2015 01:03:32 +0100
+
 bloonix-server (0.20-1) unstable; urgency=low
 
     * Nagios stats can now be parsed and stored.
