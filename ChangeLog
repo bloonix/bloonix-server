@@ -1,3 +1,8 @@
+bloonix-server (0.21) released at 2015-03-10
+
+    * Service and host actions (active, notification, acknowlegded)
+      will now all reported.
+
 bloonix-server (0.20) released at 2015-03-09
 
     * Nagios stats can now be parsed and stored.

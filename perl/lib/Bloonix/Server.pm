@@ -716,6 +716,7 @@ sub check_services {
 
         # Let's go
         $self->log->notice("checking service $service_id command $c_service->{command} with status $n_status");
+        $self->check_service_states;
 
         if ($self->check_if_host_or_service_not_active) {
             next CHECK;
@@ -830,6 +831,7 @@ sub check_services {
 
             if ($c_service->{acknowledged} == 1) {
                 $status{acknowledged} = 0;
+                $status{acknowledged_comment} = "auto cleared";
             }
 
             if ($c_service->{status_dependency_matched} > 0) {
@@ -1236,6 +1238,23 @@ sub check_services {
     }
 }
 
+sub check_service_states {
+    my $self = shift;
+
+    if ($self->c_service->{acknowledged} == 1) {
+        my $c = $self->c_service->{acknowledged_comment} || "n/a";
+        $self->n_service->{message} = join(" ", "[ACKNOWLEDGED: $c]", $self->n_service->{message});
+    }
+
+    if ($self->host->{notification} == 0 || $self->c_service->{notification} == 0) {
+        my $c = $self->host->{notification} == 0
+            ? $self->host->{notification_comment}
+            : $self->c_service->{notification_comment};
+        $c ||= "n/a";
+        $self->n_service->{message} = join(" ", "[SILENCED: $c]", $self->n_service->{message});
+    }
+}
+
 sub check_if_host_or_service_not_active {
     my $self = shift;
     my $comment;
@@ -1256,7 +1275,7 @@ sub check_if_host_or_service_not_active {
 
     my %status = (
         status => "INFO",
-        message => join(" ", "[INACTIVE: $comment]", $self->n_service->{message}),
+        message => join(" ", "[INACIVE: $comment]", $self->n_service->{message}),
         attempt_counter => 1,
         next_check_timeout => $self->etime + $self->service_interval + $self->service_timeout
     );
