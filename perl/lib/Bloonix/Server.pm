@@ -1275,7 +1275,7 @@ sub check_if_host_or_service_not_active {
 
     my %status = (
         status => "INFO",
-        message => join(" ", "[INACIVE: $comment]", $self->n_service->{message}),
+        message => join(" ", "[INACTIVE: $comment]", $self->n_service->{message}),
         attempt_counter => 1,
         next_check_timeout => $self->etime + $self->service_interval + $self->service_timeout
     );

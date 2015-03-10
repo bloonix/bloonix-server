@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.21
+Version: 0.22
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -195,6 +195,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Mar 10 2015 Jonny Schulz <js@bloonix.de> - 0.22-1
+- "INACIVE" typo fixed.
 * Tue Mar 10 2015 Jonny Schulz <js@bloonix.de> - 0.21-1
 - Service and host actions (active, notification, acknowlegded)
   will now all reported.
