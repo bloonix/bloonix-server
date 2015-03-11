@@ -1,3 +1,10 @@
+bloonix-server (0.23-1) unstable; urgency=low
+
+    * Fixed missing function call for Bloonix::SwitchUser in
+      bloonix-roll-forward-log.
+
+ -- Jonny Schulz <js@bloonix.de>  Wed, 11 Mar 2015 16:46:34 +0100
+
 bloonix-server (0.22-1) unstable; urgency=low
 
     * "INACIVE" typo fixed.

@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.22
+Version: 0.23
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -195,6 +195,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Wed Mar 11 2015 Jonny Schulz <js@bloonix.de> - 0.23-1
+- Fixed missing function call for Bloonix::SwitchUser in
+  bloonix-roll-forward-log.
 * Tue Mar 10 2015 Jonny Schulz <js@bloonix.de> - 0.22-1
 - "INACIVE" typo fixed.
 * Tue Mar 10 2015 Jonny Schulz <js@bloonix.de> - 0.21-1
