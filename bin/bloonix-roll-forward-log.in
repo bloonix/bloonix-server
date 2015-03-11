@@ -7,7 +7,7 @@ use Bloonix::SwitchUser;
 use IO::Handle;
 use JSON;
 
-Bloonix::SwitchUser->("bloonix");
+Bloonix::SwitchUser->to("bloonix");
 
 $SIG{HUP} = $SIG{INT} = $SIG{TERM} = "IGNORE";
 

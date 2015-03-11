@@ -1,3 +1,8 @@
+bloonix-server (0.23) released at 2015-03-11
+
+    * Fixed missing function call for Bloonix::SwitchUser in
+      bloonix-roll-forward-log.
+
 bloonix-server (0.22) released at 2015-03-10
 
     * "INACIVE" typo fixed.
