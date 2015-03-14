@@ -1,3 +1,7 @@
+bloonix-server (0.24) released at 2015-XX-XX
+
+    * ProcManager and FCGI were splittet into 2 modules.
+
 bloonix-server (0.23) released at 2015-03-11
 
     * Fixed missing function call for Bloonix::SwitchUser in

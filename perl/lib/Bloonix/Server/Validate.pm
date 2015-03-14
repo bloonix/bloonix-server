@@ -88,6 +88,17 @@ sub main {
         mode => "append"
     };
 
+    foreach my $key (keys %{$opts{proc_manager}}) {
+        if ($key =~ /^(port|listen|lockfile)\z/) {
+            $opts{fcgi_options}{$key} = delete $opts{proc_manager}{$key};
+        } elsif ($key eq "server_status") {
+            $opts{server_status} = delete $opts{proc_manager}{$key};
+        } else {
+            $opts{proc_manager_options}{$key} = delete $opts{proc_manager}{$key};
+        }
+    }
+
+    $opts{server_status} ||= {};
     return \%opts;
 }
 

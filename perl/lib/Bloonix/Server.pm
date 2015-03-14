@@ -19,13 +19,15 @@ Log::Handler->get_logger("bloonix")->set_pattern("%Y", "Y", "n/a"); # host id
 
 use Bloonix::HangUp;
 use Bloonix::FCGI;
+use Bloonix::ProcManager;
+use Bloonix::ProcHelper;
 use Bloonix::Server::Validate;
 use Bloonix::Server::Database;
 use Bloonix::Timeperiod;
 use Bloonix::REST;
 
 use base qw/Bloonix::Accessor/;
-__PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json fcgi cgi peerhost/);
+__PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi peerhost/);
 __PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami/);
 __PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime roster company request host_alive_status/);
 __PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations default_location attempt_max_reached/);
@@ -41,36 +43,26 @@ sub run {
     my $self = bless $opts, $class;
 
     $self->init;
-    $self->fcgi(Bloonix::FCGI->new($self->config->{proc_manager}));
+    $self->fcgi(Bloonix::FCGI->new($self->config->{fcgi_options}));
+    $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager_options}));
+    $self->proc_helper(Bloonix::ProcHelper->new($self->config->{server_status}));
     $self->log->notice("bloonix server started");
 
-    while (my $cgi = $self->fcgi->accept) {
-        $self->cgi($cgi);
+    while (!$self->proc->done) {
+        $self->proc->set_status_waiting;
+ 
+        if ($self->fcgi->accept) {
+            $self->proc->set_status_reading;
+            my $cgi = $self->fcgi->get_new_cgi
+                or next;
 
-        eval {
-            my $time = Time::HiRes::gettimeofday();
-            $ENV{TZ} = $self->config->{timezone};
-            $self->log->set_pattern("%X", "X", $self->cgi->remote_addr);
-            $self->log->set_pattern("%Y", "Y", "n/a");
-            $self->log->notice("request started (${time}s)");
-            $self->peerhost($self->cgi->remote_addr);
-            $self->db->reconnect;
-            $self->set_time;
+            $self->proc->set_status_processing(
+                client  => $cgi->remote_addr,
+                request => join(" ", $cgi->request_method, $cgi->request_uri)
+            );
 
-            if ($cgi->path_info eq "/ping") {
-                $self->response({ status => "ok", message => "pong" });
-            } elsif ($cgi->path_info =~ m!^/hostcheck/(.+)\.([^\s.]+)\z!) {
-                $self->process_host_check($1, $2);
-            } else {
-                $self->process_request;
-            }
-
-            $time = sprintf("%.3f", Time::HiRes::gettimeofday() - $time);
-            $self->log->notice("request finished (${time}s)");
-        };
-
-        if ($@) {
-            $self->log->trace(error => $@);
+            $self->cgi($cgi);
+            $self->process_http_request;
         }
     }
 }
@@ -121,6 +113,8 @@ sub init_logger {
     $self->log->set_pattern("%X", "X", "server");
     $self->log->config(config => $self->config->{logger});
     $self->log->notice("new bloonix server started");
+    $SIG{__DIE__} = sub { $self->log->trace(fatal => @_) };
+    $SIG{__WARN__} = sub { $self->log->warning(@_) };
 }
 
 sub init_math_objects {
@@ -154,6 +148,36 @@ sub process_host_check {
     } else {
         $self->log->error("hostcheck from", $self->cgi->remote_addr, "for host $host_id was not successful");
         $self->response({ status => "err", message => "host $host_id does not exists" });
+    }
+}
+
+sub process_http_request {
+    my $self = shift;
+
+    eval {
+        my $time = Time::HiRes::gettimeofday();
+        $ENV{TZ} = $self->config->{timezone};
+        $self->log->set_pattern("%X", "X", $self->cgi->remote_addr);
+        $self->log->set_pattern("%Y", "Y", "n/a");
+        $self->log->notice("request started (${time}s)");
+        $self->peerhost($self->cgi->remote_addr);
+        $self->db->reconnect;
+        $self->set_time;
+
+        if ($self->cgi->path_info eq "/ping") {
+            $self->response({ status => "ok", message => "pong" });
+        } elsif ($self->cgi->path_info =~ m!^/hostcheck/(.+)\.([^\s.]+)\z!) {
+            $self->process_host_check($1, $2);
+        } elsif (!$self->proc_helper->is_server_status(proc => $self->proc, cgi => $self->cgi)) {
+            $self->process_request;
+        }
+
+        $time = sprintf("%.3f", Time::HiRes::gettimeofday() - $time);
+        $self->log->notice("request finished (${time}s)");
+    };
+
+    if ($@) {
+        $self->log->trace(error => $@);
     }
 }
 
@@ -2412,6 +2436,12 @@ sub response {
 
     print "Content-Type: text/plain\n\n";
     print $data;
+
+    $self->finish;
+}
+
+sub finish {
+    my $self = shift;
 
     $self->fcgi->finish;
 }
