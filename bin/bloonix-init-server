@@ -1,0 +1,53 @@
+#!/bin/sh
+
+if [ ! -e "/etc/bloonix/server/main.conf" ] ; then
+    echo "create /etc/bloonix/server/main.conf"
+    mkdir -p /etc/bloonix/server
+    chown root:root /etc/bloonix /etc/bloonix/server
+    chmod 755 /etc/bloonix /etc/bloonix/server
+    if [ -e "/usr/lib/bloonix/etc/server/main.conf" ] ; then
+        cp -a /usr/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
+    else
+        cp -a /usr/local/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
+    fi
+    chown root:bloonix /etc/bloonix/server/main.conf
+    chmod 640 /etc/bloonix/server/main.conf
+fi
+
+if [ ! -e "/etc/bloonix/server/pki" ] ; then
+    echo "create /etc/bloonix/server/pki/*"
+    mkdir -p /etc/bloonix/server/pki
+    chown root:bloonix /etc/bloonix/server/pki
+    chmod 750 /etc/bloonix/server/pki
+    openssl req -new -x509 -nodes -out /etc/bloonix/server/pki/server.cert -keyout /etc/bloonix/server/pki/server.key -batch
+    chown root:bloonix /etc/bloonix/server/pki/server.key /etc/bloonix/server/pki/server.cert
+    chmod 640 /etc/bloonix/server/pki/server.key /etc/bloonix/server/pki/server.cert
+fi
+
+if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
+    echo "create /etc/bloonix/srvchk/main.conf"
+    mkdir -p /etc/bloonix/srvchk
+    chown root:root /etc/bloonix /etc/bloonix/srvchk
+    chmod 755 /etc/bloonix /etc/bloonix/srvchk
+    if [ -e "/usr/lib/bloonix/etc/srvchk/main.conf" ] ; then
+        cp -a /usr/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
+    else
+        cp -a /usr/local/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
+    fi
+    chown root:bloonix /etc/bloonix/srvchk/main.conf
+    chmod 640 /etc/bloonix/srvchk/main.conf
+fi
+
+if [ ! -e "/etc/bloonix/database/main.conf" ] ; then
+    echo "create /etc/bloonix/database/main.conf"
+    mkdir -p /etc/bloonix/database
+    chown root:root /etc/bloonix /etc/bloonix/database
+    chmod 755 /etc/bloonix /etc/bloonix/database
+    if [ -e "/usr/lib/bloonix/etc/database/server-main.conf" ] ; then
+        cp -a /usr/lib/bloonix/etc/database/server-main.conf /etc/bloonix/database/main.conf
+    else
+        cp -a /usr/local/lib/bloonix/etc/database/server-main.conf /etc/bloonix/database/main.conf
+    fi
+    chown root:bloonix /etc/bloonix/database/main.conf
+    chmod 640 /etc/bloonix/database/main.conf
+fi
