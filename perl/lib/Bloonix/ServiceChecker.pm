@@ -116,9 +116,9 @@ package Bloonix::ServiceChecker;
 use strict;
 use warnings;
 use Bloonix::Config;
-use Bloonix::HangUp;
-use Bloonix::REST;
 use Bloonix::DBI;
+use Bloonix::HangUp;
+use Bloonix::IO::SIPC;
 use Bloonix::SQL::Creator;
 use Params::Validate qw();
 use POSIX qw(:sys_wait_h getgid getuid setgid setuid);
@@ -127,7 +127,7 @@ use Log::Handler;
 
 # Some accessors
 use base qw(Bloonix::Accessor);
-__PACKAGE__->mk_accessors(qw/config log dbi done children rest/);
+__PACKAGE__->mk_accessors(qw/config log dbi done children io/);
 __PACKAGE__->mk_counters(qw/update/);
 
 # Some constants
@@ -139,11 +139,10 @@ our $VERSION = "0.1";
 
 sub run {
     my $class = shift;
-    my $opts  = $class->validate_args(@_);
-    my $self  = bless $opts, $class;
+    my $opts = $class->validate_args(@_);
+    my $self = bless $opts, $class;
 
     $self->init;
-    $self->set_sigs;
     $self->daemonize;
 }
 
@@ -160,12 +159,13 @@ sub init {
         pid_file => $self->{pid_file}
     );
 
-    $self->dbi(Bloonix::DBI->new($config->{database}));
-    $self->rest(Bloonix::REST->new($config->{server}));
     $self->log(Log::Handler->new);
     $self->log->set_default_param(die_on_errors => 0);
     $self->log->config(config => $config->{logger});
+    $self->set_sigs;
+    $self->dbi(Bloonix::DBI->new($config->{database}));
     $self->children({});
+    $self->io(Bloonix::IO::SIPC->new($config->{server}));
 }
 
 sub set_sigs {
@@ -330,47 +330,49 @@ sub run_service_checker {
     $self->log->notice("service checker started");
     $self->dbi->connect;
 
-    while ($self->done == 0) {
-        $self->log->notice("checking services");
-        $self->dbi->reconnect;
+    while (!$self->done) {
+        eval {
+            $self->log->notice("checking services");
+            $self->dbi->reconnect;
 
-        while (my $services = $self->get_timed_out_host_services) {
-            my (%data, $host);
+            while (my $services = $self->get_timed_out_host_services) {
+                my (%data, $host);
 
-            foreach my $service (@$services) {
-                if (!$host) {
-                    $host = $self->get_host_by_id($service->{host_id});
-                    $self->log->info("***", scalar @$services, "expired services found");
-                    %data = (
-                        whoami => "srvchk",
-                        version => $VERSION,
-                        host_id => $host->{id},
-                        password => $host->{password},
-                    );
+                foreach my $service (@$services) {
+                    if (!$host) {
+                        $host = $self->get_host_by_id($service->{host_id});
+                        $self->log->info("***", scalar @$services, "expired services found");
+                        %data = (
+                            action => "post-service-data",
+                            whoami => "srvchk",
+                            version => $VERSION,
+                            host_id => $host->{id},
+                            password => $host->{password},
+                        );
+                    }
+
+                    my $service_id = $service->{id};
+
+                    $data{data}{$service->{id}} = {
+                        status  => "CRITICAL",
+                        message => "Service check timeout after $host->{timeout}s (host/agent dead?)"
+                    };
                 }
 
-                my $service_id = $service->{id};
-
-                $data{data}{$service->{id}} = {
-                    status  => "CRITICAL",
-                    message => "Service check timeout after $host->{timeout}s (host/agent dead?)"
-                };
-            }
-
-            if (scalar keys %data && $self->done == 0) {
-                $self->log->dump(notice => \%data);
-
-                if (my $res = $self->rest->post(data => \%data)) {
-                    $self->log->dump(info => $res);
-                } else {
-                    $self->log->error($self->rest->errstr);
+                if (scalar keys %data && !$self->done) {
+                    $self->log->notice("reporting", scalar keys %data, "expired services");
+                    $self->log->dump(info => \%data);
+                    $self->io->connect or die $self->io->errstr;
+                    $self->io->send(\%data) or die $self->io->errstr;
                 }
-            }
 
-            last if $self->done;
+                last if $self->done;
+            }
+        };
+
+        if (!$self->done) {
+            sleep 15;
         }
-
-        sleep 15;
     }
 
     $self->log->notice("service checker stopped");
@@ -502,6 +504,14 @@ sub validate_main {
             optional => 1,
         },
     });
+
+    my $server = $opts{server};
+    if ($server->{port}) {
+        $server->{peerport} = delete $server->{port};
+    }
+    if ($server->{host}) {
+        $server->{peeraddr} = delete $server->{host};
+    }
 
     return \%opts;
 }

@@ -2,9 +2,10 @@ package Bloonix::Server;
 
 use strict;
 use warnings;
-use Params::Validate qw//;
+use Params::Validate qw();
 use Fcntl qw(:flock);
 use JSON;
+use IO::Select;
 use Math::BigInt;
 use Math::BigFloat;
 use MIME::Lite;
@@ -19,23 +20,23 @@ Log::Handler->get_logger("bloonix")->set_pattern("%Y", "Y", "n/a"); # host id
 
 use Bloonix::HangUp;
 use Bloonix::FCGI;
+use Bloonix::IO::SIPC;
 use Bloonix::ProcManager;
-use Bloonix::ProcHelper;
 use Bloonix::Server::Validate;
 use Bloonix::Server::Database;
 use Bloonix::Timeperiod;
 use Bloonix::REST;
 
 use base qw/Bloonix::Accessor/;
-__PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi peerhost/);
-__PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami/);
-__PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime roster company request host_alive_status/);
+__PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi sipc client peerhost select/);
+__PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami runtime/);
+__PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime roster company request request_type host_alive_status/);
 __PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations default_location attempt_max_reached/);
 __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_service service_interval service_timeout/);
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.23";
+our $VERSION = "0.24";
 
 sub run {
     my $class = shift;
@@ -43,26 +44,61 @@ sub run {
     my $self = bless $opts, $class;
 
     $self->init;
-    $self->fcgi(Bloonix::FCGI->new($self->config->{fcgi_options}));
-    $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager_options}));
-    $self->proc_helper(Bloonix::ProcHelper->new($self->config->{server_status}));
-    $self->log->notice("bloonix server started");
+
+    if ($self->config->{fcgi_server}) {
+        return $self->run_deprecated;
+    }
+
+    $self->sipc(Bloonix::IO::SIPC->new($self->config->{tcp_server}));
+    $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager}));
 
     while (!$self->proc->done) {
-        $self->proc->set_status_waiting;
- 
-        if ($self->fcgi->accept) {
-            $self->proc->set_status_reading;
-            my $cgi = $self->fcgi->get_new_cgi
-                or next;
+        eval {
+            while (!$self->proc->done) {
+                $self->proc->set_status_waiting;
+                $self->process_tcp_request;
+            }
+        };
+    }
+}
 
-            $self->proc->set_status_processing(
-                client  => $cgi->remote_addr,
-                request => join(" ", $cgi->request_method, $cgi->request_uri)
-            );
+sub run_deprecated {
+    my $self = shift;
 
-            $self->cgi($cgi);
-            $self->process_http_request;
+    $self->log->warning(
+        "DEPRECATED WARNING:",
+        "The usage of the parameter 'port' and 'listen' is deprecated",
+        "in the section proc_manager! Please use the section tcp_server",
+        "instead and upgrade the bloonix-agents on all your machines.",
+        "You can find more information in the configuration documentation",
+        "of the bloonix server"
+    );
+
+    $self->select(IO::Select->new);
+    $self->fcgi(Bloonix::FCGI->new($self->config->{fcgi_server}));
+    $self->select->add($self->fcgi->sock);
+    $self->sipc(Bloonix::IO::SIPC->new($self->config->{tcp_server}));
+    $self->select->add($self->sipc->sock);
+    $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager}));
+
+    while (!$self->proc->done) {
+        eval {
+            $self->proc->set_status_waiting;
+            my @ready = $self->select->can_read;
+
+            foreach my $fh (@ready) {
+                next unless $fh;
+
+                if ($fh == $self->sipc->sock) {
+                    $self->process_tcp_request;
+                } elsif ($fh == $self->fcgi->sock) {
+                    $self->process_http_request(0.5);
+                }
+            }
+        };
+
+        if ($@) {
+            $self->log->trace(error => $@);
         }
     }
 }
@@ -132,6 +168,169 @@ sub init_math_objects {
     $self->max_p_float(Math::BigFloat->new("3.402823466E+38"));
 }
 
+###############################################################################################
+# Protocol:
+#
+#   REQ: a request has an action (gimme data)
+#   RES: the response has a status (ok, err) and a message or data
+#
+#   ping:
+#
+#       REQ: { "action": "ping" }
+#       RES: { "status": "ok", "message": "pong" }
+#
+#   hostcheck:
+#
+#       REQ: { "action": "hostcheck", "hostkey": "secret" }
+#       RES: { "status": "ok", "message": "host $host_id exists" }
+#       RES: { "status": "err", "message": "host $host_id does not exists" }
+#
+#   server-status:
+#
+#       REQ: { "action": "server-status", "authkey": "secret", "pretty": "true", "plain": "true" }
+#       RES: access denied
+#       RES: or plain statistic data
+#       RES: or a json string with the statistic data
+#
+#   get-services:
+#
+#       REQ: { "action": "get-services", "host_id": "12345", "agent_id": "remote", ... }
+#       RES: { "status": "err", "message": "access denied" }
+#       RES: { "status": "ok", "data": { "services": {}, "interval": $interval }
+#
+#   post-service-data:
+#
+#       REQ: { "action": "post-service-data", "host_id": "12345", ... }
+#       RES: { "status": "err", "message": "access denied" }
+#       RES: { "status": "ok", "message": "processing data" }
+#
+###############################################################################################
+
+sub process_tcp_request {
+    my ($self, $timeout) = @_;
+    $timeout ||= 0;
+
+    $self->log->info("wait for tcp connection");
+    my $client = $self->sipc->accept($timeout) or return;
+
+    $self->proc->set_status_reading;
+    my $request = $client->recv;
+
+    if (!$request || ref $request ne "HASH" || !$request->{action}) {
+        return;
+    }
+
+    $self->proc->set_status_processing(
+        client  => $client->sock->peerhost,
+        request => join(" ", $request->{action})
+    );
+
+    $self->log->info("process tcp request");
+    $self->peerhost($client->sock->peerhost);
+    $self->client($client);
+    $self->request_type("tcp");
+    $self->request($request);
+    $self->pre_process_request;
+    $self->process_request;
+    $self->post_process_request;
+}
+
+# The http method is deprecated. For backward compability the
+# http request is converted into a tcp request.
+sub process_http_request {
+    my $self = shift;
+
+    $self->log->info("wait for http connection");
+    $self->fcgi->accept(0.5) or return;
+
+    $self->proc->set_status_reading;
+    my $cgi = $self->fcgi->get_new_cgi or return;
+
+    $self->proc->set_status_processing(
+        client  => $cgi->remote_addr,
+        request => join(" ", $cgi->request_method, $cgi->request_uri)
+    );
+
+    $self->log->info("process http request");
+    $self->peerhost($cgi->remote_addr);
+    $self->cgi($cgi);
+    $self->request_type("http");
+    $self->pre_process_request;
+
+    $self->request({});
+
+    if ($self->cgi->path_info eq "/ping") {
+        $self->request->{action} = "ping";
+    } elsif ($self->cgi->path_info =~ m!^/hostcheck/(.+)\z!) {
+        $self->request->{action} = "hostcheck";
+        $self->request->{hostkey} = $1;
+    } elsif ($self->cgi->path_info eq "/server-status") {
+        $self->request->{action} = "server-status";
+        $self->request->{authkey} = $self->cgi->param("authkey") || 0;
+        $self->request->{pretty} = defined $self->cgi->param("pretty") ? 1 : 0;
+        $self->request->{plain} = defined $self->cgi->param("plain") ? 1 : 0;
+    } else {
+        if (!$self->cgi->postdata) {
+            $self->log->warning("no post data received");
+            $self->response({ status => "err", message => "no post data received" });
+            return undef;
+        }
+
+        my $data = $self->cgi->jsondata // $self->json->decode($self->cgi->postdata);
+
+        foreach my $key (keys %$data) {
+            $self->request->{$key} = $data->{$key};
+        }
+
+        if ($self->cgi->request_method eq "GET") {
+            $self->request->{action} = "get-services";
+        } elsif ($self->cgi->request_method eq "POST") {
+            $self->request->{action} = "post-service-data";
+        }
+    }
+
+    $self->process_request;
+    $self->post_process_request;
+}
+
+sub pre_process_request {
+    my $self = shift;
+    my $time = sprintf("%.3f", Time::HiRes::gettimeofday());
+    $self->runtime($time);
+    $ENV{TZ} = $self->config->{timezone};
+    $self->log->set_pattern("%X", "X", $self->peerhost);
+    $self->log->set_pattern("%Y", "Y", "n/a");
+    $self->db->reconnect;
+    $self->set_time;
+}
+
+sub process_request {
+    my $self = shift;
+
+    if ($self->request->{action} eq "get-services" || $self->request->{action} eq "post-service-data") {
+        $self->check_request or return;
+        $self->check_locations;
+
+        if ($self->request->{action} eq "get-services") {
+            $self->process_get_services;
+        } elsif ($self->request->{action} eq "post-service-data") {
+            $self->process_post_service_data;
+        }
+    } elsif ($self->request->{action} eq "ping") {
+        $self->response({ status => "ok", message => "pong" });
+    } elsif ($self->request->{action} eq "hostcheck" && $self->request->{hostkey} && $self->request->{hostkey} =~ m!^(.+)\.([^\s.]+)\z!) {
+        $self->process_host_check($1, $2);
+    } elsif ($self->request->{action} eq "server-status") {
+        $self->process_server_status;
+    }
+}
+
+sub post_process_request {
+    my $self = shift;
+    my $time = sprintf("%.3f", Time::HiRes::gettimeofday() - $self->runtime);
+    $self->log->notice("request finished (${time}s)");
+}
+
 sub process_host_check {
     my ($self, $host_id, $password) = @_;
 
@@ -143,41 +342,35 @@ sub process_host_check {
     );
 
     if ($host) {
-        $self->log->warning("hostcheck from", $self->cgi->remote_addr, "for host $host_id was successful");
+        $self->log->warning("hostcheck from", $self->peeraddr, "for host $host_id was successful");
         $self->response({ status => "ok", message => "host $host_id exists" });
     } else {
-        $self->log->error("hostcheck from", $self->cgi->remote_addr, "for host $host_id was not successful");
+        $self->log->error("hostcheck from", $self->peeraddr, "for host $host_id was not successful");
         $self->response({ status => "err", message => "host $host_id does not exists" });
     }
 }
 
-sub process_http_request {
+sub process_server_status {
     my $self = shift;
 
-    eval {
-        my $time = Time::HiRes::gettimeofday();
-        $ENV{TZ} = $self->config->{timezone};
-        $self->log->set_pattern("%X", "X", $self->cgi->remote_addr);
-        $self->log->set_pattern("%Y", "Y", "n/a");
-        $self->log->notice("request started (${time}s)");
-        $self->peerhost($self->cgi->remote_addr);
-        $self->db->reconnect;
-        $self->set_time;
+    my $server_status = $self->config->{server_status};
+    my $allow_from = $server_status->{allow_from};
+    my $addr = $self->peerhost;
+    my $authkey = $self->request->{authkey} || 0;
+    my $plain = $self->request->{plain} || 0;
+    my $pretty = $self->request->{pretty} || 0;
 
-        if ($self->cgi->path_info eq "/ping") {
-            $self->response({ status => "ok", message => "pong" });
-        } elsif ($self->cgi->path_info =~ m!^/hostcheck/(.+)\.([^\s.]+)\z!) {
-            $self->process_host_check($1, $2);
-        } elsif (!$self->proc_helper->is_server_status(proc => $self->proc, cgi => $self->cgi)) {
-            $self->process_request;
+    if ($allow_from->{all} || $allow_from->{$addr} || ($server_status->{authkey} && $server_status->{authkey} eq $authkey)) {
+        $self->log->info("server status request from $addr - access allowed");
+        $self->proc->set_status_sending;
+
+        if ($plain) {
+            $self->response({ status => "ok", data => $self->proc->get_plain_server_status, plain => 1 });
+        } else {
+            $self->response({ status => "ok", data => $self->proc->get_raw_server_status });
         }
-
-        $time = sprintf("%.3f", Time::HiRes::gettimeofday() - $time);
-        $self->log->notice("request finished (${time}s)");
-    };
-
-    if ($@) {
-        $self->log->trace(error => $@);
+    } else {
+        $self->response({ status => "err", message => "access denied" });
     }
 }
 
@@ -185,17 +378,7 @@ sub check_request {
     my $self = shift;
 
     $self->log->notice("check authorization");
-
-    if (!$self->cgi->postdata) {
-        $self->log->warning("no post data received");
-        $self->response({ status => "err", message => "no post data received" });
-        return undef;
-    }
-
-    # jsondata returnes utf8 decoded data if the decoding was successful
-    my $decoded = $self->cgi->jsondata // $self->json->decode($self->cgi->postdata);
-    my $request = Bloonix::Server::Validate->request($decoded);
-
+    my $request = Bloonix::Server::Validate->request($self->request);
     $self->whoami($request->{whoami});
     $self->log->set_pattern("%Y", "Y", "host id $request->{host_id}");
     $self->log->notice("processing request");
@@ -228,7 +411,6 @@ sub check_request {
     $self->host($host);
     $self->company($company);
     $self->request($request);
-    $self->debug_data;
 
     return 1;
 }
@@ -243,76 +425,7 @@ sub check_locations {
     }
 }
 
-sub get_services {
-    my $self = shift;
-    my @services;
-
-    $self->log->notice(
-        "request config for host id", $self->request->{host_id},
-        "agent id", $self->request->{agent_id}
-    );
-
-    my $services = $self->db->get_active_host_services(
-        $self->request->{host_id},
-        $self->request->{agent_id}
-    );
-
-    $self->update_agent_version($services);
-
-    foreach my $service (@$services) {
-        $service->{interval} ||= $self->host->{interval};
-        $service->{timeout} ||= $self->host->{timeout};
-
-        # When a check is forced:
-        #
-        #   - if the interval is exceeded
-        #   - if a check is forced over the webgui
-        #   - if the status is WARNING|CRITICAL|UNKNOWN
-        #
-        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is between
-        # 60 and 43200 seconds, then a interval of 60 seconds is forced.
-        #
-        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is higher than
-        # or equal 43200 seconds, then a interval of 300 seconds is forced.
-
-        if ($service->{force_check}) {
-            $self->log->info("service $service->{service_id} check forced");
-            $self->db->disable_force_check($service->{service_id});
-            push @services, $service;
-        } elsif ($service->{last_check} + $service->{interval} <= $self->etime) {
-            $self->log->info("service $service->{service_id} is ready");
-            push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 60 && $service->{interval} < 43200 && $service->{last_check} + 60 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 86400 && $service->{last_check} + 600 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } else {
-            $self->log->info("service $service->{service_id} is not ready");
-        }
-    }
-
-    return \@services;
-}
-
-sub process_request {
-    my $self = shift;
-
-    $self->check_request or return;
-    $self->check_locations;
-
-    if ($self->cgi->request_method eq "GET") {
-        $self->process_get_request;
-    } elsif ($self->cgi->request_method eq "POST") {
-        $self->process_post_request;
-    }
-}
-
-sub process_get_request {
+sub process_get_services {
     my $self = shift;
 
     my $services = $self->get_services;
@@ -436,7 +549,63 @@ sub process_get_request {
     });
 }
 
-sub process_post_request {
+sub get_services {
+    my $self = shift;
+    my @services;
+
+    $self->log->notice(
+        "request config for host id", $self->request->{host_id},
+        "agent id", $self->request->{agent_id}
+    );
+
+    my $services = $self->db->get_active_host_services(
+        $self->request->{host_id},
+        $self->request->{agent_id}
+    );
+
+    $self->update_agent_version($services);
+
+    foreach my $service (@$services) {
+        $service->{interval} ||= $self->host->{interval};
+        $service->{timeout} ||= $self->host->{timeout};
+
+        # When a check is forced:
+        #
+        #   - if the interval is exceeded
+        #   - if a check is forced over the webgui
+        #   - if the status is WARNING|CRITICAL|UNKNOWN
+        #
+        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is between
+        # 60 and 43200 seconds, then a interval of 60 seconds is forced.
+        #
+        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is higher than
+        # or equal 43200 seconds, then a interval of 300 seconds is forced.
+
+        if ($service->{force_check}) {
+            $self->log->info("service $service->{service_id} check forced");
+            $self->db->disable_force_check($service->{service_id});
+            push @services, $service;
+        } elsif ($service->{last_check} + $service->{interval} <= $self->etime) {
+            $self->log->info("service $service->{service_id} is ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 60 && $service->{interval} < 43200 && $service->{last_check} + 60 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
+            push @services, $service;
+        } elsif ($service->{status} ne "OK" && $service->{interval} >= 86400 && $service->{last_check} + 600 <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready");
+            push @services, $service;
+        } else {
+            $self->log->info("service $service->{service_id} is not ready");
+        }
+    }
+
+    return \@services;
+}
+
+sub process_post_service_data {
     my $self = shift;
     $self->log->notice("send data for host id", $self->request->{host_id});
     $self->response({ status => "ok", message => "processing data" });
@@ -491,29 +660,6 @@ sub process_data {
     $self->store_stats($data);
     $self->send_sms;
     $self->send_mails;
-}
-
-sub debug_data {
-    my ($self, $data) = @_;
-    my $host_id = $self->host->{id};
-
-    if (-e "/tmp/bloonix-server-debug-$host_id") {
-        if (open my $fh, ">>", "/tmp/bloonix-server-debug-$host_id.out") {
-            if ($data) {
-                if (ref $data) {
-                    $data = JSON->new->pretty->encode($data);
-                }
-                print $fh $data, "\n";
-            } else {
-                print $fh "#" x 40, "\n";
-                print $fh scalar localtime, "\n";
-                print $fh "#" x 40, "\n\n";
-                print $fh "HTTP method: ", $self->cgi->request_method, "\n\n";
-                print $fh JSON->new->pretty->encode($self->request), "\n";
-            }
-            close $fh;
-        }
-    }
 }
 
 sub get_roster {
@@ -1179,7 +1325,7 @@ sub check_services {
                     # not NULL then the contact wants to be informed every time the soft
                     # or hard interval timed out.
                     if ($e_level) {
-                        $self->log->notice(
+                        $self->log->info(
                             "check sms escalation level for contact '$c->{name}' ($c->{id}):",
                             "($s_h_int && $s_since / $s_h_int < $c->{escalation_level})",
                             "|| ($s_s_int && $s_since / $s_s_int < $e_level})",
@@ -1192,7 +1338,7 @@ sub check_services {
                             $self->log->notice("sms escalation level matched for contact $c->{name} ($c->{id})");
                         }
 
-                        $self->log->notice(
+                        $self->log->info(
                             "check mail escalation level for contact '$c->{name}' ($c->{id}):",
                             "($m_h_int && $s_since / $m_h_int < $c->{escalation_level})",
                             "|| ($m_s_int && $s_since / $m_s_int < $e_level})",
@@ -1512,9 +1658,6 @@ sub save_es_data {
 
     $data->{time} = $self->mtime;
     $data->{host_id} = $self->host->{id};
-
-    $self->debug_data($path);
-    $self->debug_data($data);
 
     $self->rest_post(
         path => $path,
@@ -2422,28 +2565,20 @@ sub year_month_stamp {
 
 sub response {
     my ($self, $data) = @_;
-    my $pretty = $self->cgi->param("pretty");
 
-    if ($pretty) {
-        $self->json->pretty(1);
+    if ($self->request_type eq "tcp") {
+        $self->client->send($data);
+        #$self->client->disconnect;
+    } elsif ($self->request_type eq "http") {
+        if ($data->{data} && $data->{plain}) {
+            print "Content-Type: text/plain\n\n";
+            print $data->{data};
+        } else {
+            print "Content-Type: application/json\n\n";
+            print $self->json->encode($data);
+        }
+        $self->fcgi->finish;
     }
-
-    $data = $self->json->encode($data);
-
-    if ($pretty) {
-        $self->json->pretty(0);
-    }
-
-    print "Content-Type: text/plain\n\n";
-    print $data;
-
-    $self->finish;
-}
-
-sub finish {
-    my $self = shift;
-
-    $self->fcgi->finish;
 }
 
 1;

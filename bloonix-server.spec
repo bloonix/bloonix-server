@@ -32,6 +32,7 @@ Requires: perl(Sys::Hostname)
 Requires: perl(Time::HiRes)
 Requires: perl(Time::ParseDate)
 Requires: perl(URI::Escape)
+Requires: openssl
 AutoReqProv: no
 
 %description
@@ -96,36 +97,7 @@ systemctl condrestart bloonix-server.service
 /sbin/service bloonix-server condrestart &>/dev/null
 %endif
 
-if [ ! -e "/etc/bloonix/server/main.conf" ] ; then
-    mkdir -p /etc/bloonix/server
-    chown root:root /etc/bloonix /etc/bloonix/server
-    chmod 755 /etc/bloonix /etc/bloonix/server
-    cp -a /usr/lib/bloonix/etc/server/main.conf /etc/bloonix/server/main.conf
-    chown root:bloonix /etc/bloonix/server/main.conf
-    chmod 640 /etc/bloonix/server/main.conf
-fi
-
-if [ ! -e "/etc/bloonix/srvchk/main.conf" ] ; then
-    mkdir -p /etc/bloonix/srvchk
-    chown root:root /etc/bloonix /etc/bloonix/srvchk
-    chmod 755 /etc/bloonix /etc/bloonix/srvchk
-    cp -a /usr/lib/bloonix/etc/srvchk/main.conf /etc/bloonix/srvchk/main.conf
-    chown root:bloonix /etc/bloonix/srvchk/main.conf
-    chmod 640 /etc/bloonix/srvchk/main.conf
-fi
-
-if [ ! -e "/etc/bloonix/database/main.conf" ] ; then
-    mkdir -p /etc/bloonix/database
-    chown root:root /etc/bloonix /etc/bloonix/database
-    chmod 755 /etc/bloonix /etc/bloonix/database
-    cp -a /usr/lib/bloonix/etc/database/server-main.conf /etc/bloonix/database/main.conf
-    chown root:bloonix /etc/bloonix/database/main.conf
-    chmod 640 /etc/bloonix/database/main.conf
-fi
-
-if [ -e "/etc/nginx/conf.d" ] && [ ! -e "/etc/nginx/conf.d/bloonix-server.conf" ] ; then
-    install -c -m 0644 /usr/lib/bloonix/etc/server/nginx.conf /etc/nginx/conf.d/bloonix-server.conf
-fi
+/usr/bin/bloonix-init-server
 
 %preun
 if [ $1 -eq 0 ]; then
@@ -153,7 +125,6 @@ rm -rf %{buildroot}
 %dir %attr(0755, root, root) %{blxdir}/etc
 %dir %attr(0755, root, root) %{blxdir}/etc/server
 %{blxdir}/etc/server/main.conf
-%{blxdir}/etc/server/nginx.conf
 %dir %attr(0755, root, root) %{blxdir}/etc/srvchk
 %{blxdir}/etc/srvchk/main.conf
 %dir %attr(0755, root, root) %{blxdir}/etc/database

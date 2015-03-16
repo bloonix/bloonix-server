@@ -19,6 +19,18 @@ sub main {
         proc_manager => {
             type => Params::Validate::HASHREF,
         },
+        server_status => {
+            type => Params::Validate::HASHREF,
+            default => {}
+        },
+        fcgi_server => {
+            type => Params::Validate::HASHREF,
+            optional => 1
+        },
+        tcp_server => {
+            type => Params::Validate::HASHREF,
+            default => {}
+        },
         timezone => {
             type => Params::Validate::SCALAR,
             default => "Europe/Berlin",
@@ -89,16 +101,91 @@ sub main {
     };
 
     foreach my $key (keys %{$opts{proc_manager}}) {
-        if ($key =~ /^(port|listen|lockfile)\z/) {
-            $opts{fcgi_options}{$key} = delete $opts{proc_manager}{$key};
+        if ($key =~ /^(port|listen)\z/) {
+            $opts{fcgi_server}{$key} = delete $opts{proc_manager}{$key};
         } elsif ($key eq "server_status") {
-            $opts{server_status} = delete $opts{proc_manager}{$key};
-        } else {
-            $opts{proc_manager_options}{$key} = delete $opts{proc_manager}{$key};
+            $opts{server_status}{$key} = delete $opts{proc_manager}{$key};
         }
     }
 
-    $opts{server_status} ||= {};
+    $opts{tcp_server} = $class->tcp_server($opts{tcp_server});
+    $opts{server_status} = $class->server_status($opts{server_status});
+
+    return \%opts;
+}
+
+sub tcp_server {
+    my $class = shift;
+
+    my %opts = Params::Validate::validate(@_, {
+        host => {
+            type => Params::Validate::SCALAR,
+            optional => 1
+        },
+        port => {
+            type => Params::Validate::SCALAR,
+            default => 5460
+        },
+        use_ssl => {
+            type => Params::Validate::SCALAR,
+            default => 1
+        },
+        ssl_key_file => {
+            type => Params::Validate::SCALAR,
+            default => "/etc/bloonix/server/pki/server.key"
+        },
+        ssl_cert_file => {
+            type => Params::Validate::SCALAR,
+            default => "/etc/bloonix/server/pki/server.cert"
+        },
+        mode => {
+            type => Params::Validate::SCALAR,
+            default => "failover"
+        }
+    });
+
+    if ($opts{host}) {
+        $opts{localaddr} = delete $opts{host};
+    }
+
+    $opts{localport} = delete $opts{port};
+    $opts{auto_connect} = 1;
+    $opts{listen} = 1;
+
+    return \%opts;
+}
+
+sub server_status {
+    my $class = shift;
+
+    my %opts = Params::Validate::validate(@_, {
+        enabled => {
+            type => Params::Validate::SCALAR,
+            default => "yes",
+            regex => qr/^(0|1|no|yes)\z/
+        },
+        allow_from => {
+            type => Params::Validate::SCALAR,
+            default => "127.0.0.1"
+        },
+        authkey => {
+            type => Params::Validate::SCALAR,
+            optional => 1
+        }
+    });
+
+    # deprecated
+    delete $opts{location};
+
+    if ($opts{enabled} eq "no") {
+        $opts{enabled} = 0;
+    }
+
+    $opts{allow_from} =~ s/\s//g;
+    $opts{allow_from} = {
+        map { $_, 1 } split(/,/, $opts{allow_from})
+    };
+
     return \%opts;
 }
 
@@ -167,6 +254,10 @@ sub request {
     my $self = shift;
 
     my %opts = Params::Validate::validate(@_, {
+        action => {
+            type => Params::Validate::SCALAR,
+            regex => qr/^(get-services|post-service-data)\z/
+        },
         whoami => {
             type => Params::Validate::SCALAR,
             regex => qr/^[\w\-]+\z/,

@@ -19,7 +19,6 @@ build:
 		etc/init/bloonix-srvchk \
 		etc/init/bloonix-server.service \
 		etc/init/bloonix-srvchk.service \
-		etc/bloonix/server/nginx.conf \
 	; do \
 		cp $$file.in $$file; \
 		sed -i "s!@@PERL@@!$(PERL)!g" $$file; \
@@ -58,6 +57,7 @@ install:
 	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix/server;
 	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix;
 	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix/server;
+	./install-sh -d -m 0750 -o root -g $(GROUPNAME) $(CONFDIR)/bloonix/server/pki;
 
 	for file in \
 		bloonix-server \
@@ -68,13 +68,13 @@ install:
 		bloonix-get-sms-count \
 		bloonix-roll-forward-log  \
 		bloonix-update-agent-host-config \
+		bloonix-init-server \
 	; do \
 		./install-sh -c -m 0755 bin/$$file $(PREFIX)/bin/$$file; \
 	done;
 
 	./install-sh -d -m 0755 $(USRLIBDIR)/bloonix/etc/server;
 	./install-sh -c -m 0644 etc/bloonix/server/main.conf $(USRLIBDIR)/bloonix/etc/server/main.conf;
-	./install-sh -c -m 0644 etc/bloonix/server/nginx.conf $(USRLIBDIR)/bloonix/etc/server/nginx.conf;
 
 	./install-sh -d -m 0755 $(USRLIBDIR)/bloonix/etc/srvchk;
 	./install-sh -c -m 0644 etc/bloonix/srvchk/main.conf $(USRLIBDIR)/bloonix/etc/srvchk/main.conf;
@@ -101,9 +101,6 @@ install:
 	if test "$(BUILDPKG)" = "0" ; then \
 		if test ! -e "$(CONFDIR)/bloonix/server/main.conf" ; then \
 			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/server/main.conf $(CONFDIR)/bloonix/server/main.conf; \
-		fi; \
-		if test ! -e "$(CONFDIR)/bloonix/server/nginx.conf" ; then \
-			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/server/nginx.conf $(CONFDIR)/bloonix/server/nginx.conf; \
 		fi; \
 		if test ! -e "$(CONFDIR)/bloonix/srvchk/main.conf" ; then \
 			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/srvchk/main.conf $(CONFDIR)/bloonix/srvchk/main.conf; \
