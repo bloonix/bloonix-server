@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.23
+Version: 0.24
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -144,6 +144,7 @@ rm -rf %{buildroot}
 %{_bindir}/bloonix-count-es-service-documents
 %{_bindir}/bloonix-delete-es-host-data
 %{_bindir}/bloonix-get-sms-count
+%{_bindir}/bloonix-init-server
 %{_bindir}/bloonix-roll-forward-log
 %{_bindir}/bloonix-update-agent-host-config
 
@@ -166,6 +167,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sat Mar 21 2015 Jonny Schulz <js@bloonix.de> - 0.24-1
+- ProcManager and FCGI were splittet into 2 modules.
 * Wed Mar 11 2015 Jonny Schulz <js@bloonix.de> - 0.23-1
 - Fixed missing function call for Bloonix::SwitchUser in
   bloonix-roll-forward-log.

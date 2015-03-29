@@ -17,5 +17,5 @@
 ### END INIT INFO
 
 . @@USRLIBDIR@@/bloonix/bin/bloonix-init-source
-CHECK_DIRS="$CACHEDIR $LOGDIR $RUNDIR"
+CHECK_DIRS="$LIBDIR $LIBDIR/ipc $LOGDIR $RUNDIR"
 __run

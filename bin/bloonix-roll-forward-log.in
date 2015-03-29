@@ -47,7 +47,6 @@ if ($i) {
 
 while (my $line = <$in>) {
     $i++; print "processing line $i\r";
-    print $i, "\r";
     my $req = $json->decode($line);
     #&typecast($req->{data});
     if (!$rest->post(%$req)) {

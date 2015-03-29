@@ -1,4 +1,4 @@
-bloonix-server (0.24) released at 2015-XX-XX
+bloonix-server (0.24) released at 2015-03-21
 
     * ProcManager and FCGI were splittet into 2 modules.
 

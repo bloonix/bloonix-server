@@ -342,10 +342,10 @@ sub process_host_check {
     );
 
     if ($host) {
-        $self->log->warning("hostcheck from", $self->peeraddr, "for host $host_id was successful");
+        $self->log->warning("hostcheck from", $self->peerhost, "for host $host_id was successful");
         $self->response({ status => "ok", message => "host $host_id exists" });
     } else {
-        $self->log->error("hostcheck from", $self->peeraddr, "for host $host_id was not successful");
+        $self->log->error("hostcheck from", $self->peerhost, "for host $host_id was not successful");
         $self->response({ status => "err", message => "host $host_id does not exists" });
     }
 }
