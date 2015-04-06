@@ -218,92 +218,6 @@ sub get_service_contacts {
     return \@contact;
 }
 
-sub get_roster_host {
-    my ($self, $host_id, $stime) = @_;
-    my (%seen, @contact);
-
-    my $roster = $self->dbi->fetch(
-        $self->sql->select(
-            table  => "roster_host",
-            column => "*",
-            condition => [
-                host_id => $host_id,
-            ]
-        )
-    );
-
-    if ($roster) {
-        foreach my $roster (@$roster) {
-            my $contacts = $self->dbi->fetch(
-                $self->sql->select(
-                    table => [
-                        roster_contact => "*",
-                        contact => [qw(
-                            name mail_to sms_to mail_notification_level sms_notification_level
-                            mail_notifications_enabled sms_notifications_enabled
-                        )],
-                    ],
-                    join => [
-                        inner => {
-                            table => "roster_entry",
-                            left  => "roster_contact.roster_entry_id",
-                            right => "roster_entry.id",
-                        },
-                        inner => {
-                            table => "roster",
-                            left  => "roster_entry.roster_id",
-                            right => "roster.id",
-                        },
-                        inner => {
-                            table => "contact",
-                            left  => "roster_contact.contact_id",
-                            right => "contact.id",
-                        },
-                    ],
-                    condition => [
-                        where => {
-                            table  => "roster_entry",
-                            column => "roster_id",
-                            op     => "=",
-                            value  => $roster->{roster_id},
-                        },
-                        and => {
-                            table  => "roster",
-                            column => "active",
-                            op     => "=",
-                            value  => 1,
-                        },
-                        and => {
-                            table  => "roster_entry",
-                            column => "from_time",
-                            op     => "<=",
-                            value  => $stime,
-                        },
-                        and => {
-                            table  => "roster_entry",
-                            column => "to_time",
-                            op     => ">=",
-                            value  => $stime,
-                        },
-                    ],
-                )
-            );
-
-            if ($contacts) {
-                foreach my $c (@$contacts) {
-                    if (!$seen{$c->{contact_id}}) {
-                        $c->{is_roster} = 1;
-                        push @contact, $c;
-                        $seen{$c->{contact_id}}++;
-                    }
-                }
-            }
-        }
-    }
-
-    return \@contact;
-}
-
 sub get_active_host_services {
     my ($self, $host_id, $agent_id) = @_;
 
@@ -401,7 +315,7 @@ sub get_active_host_services {
 }
 
 sub get_sms_count {
-    my ($self, $host_id, $year, $month) = @_;
+    my ($self, $type, $id, $year, $month) = @_;
 
     if (!$year) {
         my @time = (localtime(time))[reverse 0..5];
@@ -410,9 +324,35 @@ sub get_sms_count {
     }
 
     my $from = sprintf("%04d-%02d-%02d", $year, $month, 1);
-    my $to   = sprintf("%04d-%02d-%02d", $year, $month == 12 ? 1 : $month + 1, 1);
+    my $to = sprintf("%04d-%02d-%02d", $year, $month == 12 ? 1 : $month + 1, 1);
     $from = Time::ParseDate::parsedate($from);
-    $to   = Time::ParseDate::parsedate($to);
+    $to = Time::ParseDate::parsedate($to);
+
+    if ($type eq "host") {
+        return $self->dbi->unique(
+            $self->sql->select(
+                count => "*",
+                table => "sms_send",
+                condition => [
+                    where => {
+                        column => "host_id",
+                        op => "=",
+                        value => $id
+                    },
+                    and => {
+                        column => "time",
+                        op => ">=",
+                        value => $from
+                    },
+                    and => {
+                        column => "time",
+                        op => "<",
+                        value => $to
+                    }
+                ]
+            )
+        );
+    }
 
     return $self->dbi->unique(
         $self->sql->select(
@@ -421,20 +361,20 @@ sub get_sms_count {
             condition => [
                 where => {
                     column => "host_id",
-                    op     => "=",
-                    value  => $host_id,
+                    op => "=",
+                    value => $id
                 },
                 and => {
                     column => "time",
-                    op     => ">=",
-                    value  => $from,
+                    op => ">=",
+                    value => $from
                 },
                 and => {
                     column => "time",
-                    op     => "<",
-                    value  => $to,
-                },
-            ],
+                    op => "<",
+                    value => $to
+                }
+            ]
         )
     );
 }

@@ -108,6 +108,10 @@ sub main {
         }
     }
 
+    if (!$opts{proc_manager}{lockfile}) {
+        $opts{proc_manager}{lockfile} = "/var/lib/bloonix/ipc/server.%P.lock";
+    }
+
     $opts{tcp_server} = $class->tcp_server($opts{tcp_server});
     $opts{server_status} = $class->server_status($opts{server_status});
 
@@ -222,6 +226,14 @@ sub smsgateway {
             type => Params::Validate::SCALAR
         },
         response => {
+            type => Params::Validate::SCALAR,
+            default => ""
+        },
+        failover_command => {
+            type => Params::Validate::SCALAR,
+            optional => 1
+        },
+        failover_response => {
             type => Params::Validate::SCALAR,
             default => ""
         }

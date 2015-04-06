@@ -85,6 +85,7 @@ getent passwd bloonix >/dev/null || /usr/sbin/useradd \
     bloonix -g bloonix -s /sbin/nologin -d /var/run/bloonix -r
 
 %post
+/usr/bin/bloonix-init-server
 %if %{?with_systemd}
 systemctl preset bloonix-server.service
 systemctl preset bloonix-srvchk.service
@@ -96,8 +97,6 @@ systemctl condrestart bloonix-server.service
 /sbin/service bloonix-srvchk condrestart &>/dev/null
 /sbin/service bloonix-server condrestart &>/dev/null
 %endif
-
-/usr/bin/bloonix-init-server
 
 %preun
 if [ $1 -eq 0 ]; then

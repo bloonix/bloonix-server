@@ -30,7 +30,7 @@ use Bloonix::REST;
 use base qw/Bloonix::Accessor/;
 __PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi sipc client peerhost select/);
 __PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami runtime/);
-__PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime roster company request request_type host_alive_status/);
+__PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime company request request_type host_alive_status/);
 __PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations default_location attempt_max_reached/);
 __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_service service_interval service_timeout/);
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
@@ -634,7 +634,6 @@ sub process_data {
     # Clear and reuse the object buffers
     $self->host_downtime(undef);
     $self->service_downtime(undef);
-    $self->roster(undef);
     $self->dependencies({});
     $self->attempt_max_reached({});
     $self->get_downtimes;
@@ -660,18 +659,6 @@ sub process_data {
     $self->store_stats($data);
     $self->send_sms;
     $self->send_mails;
-}
-
-sub get_roster {
-    my $self = shift;
-
-    if (!$self->roster) {
-        my $host_id = $self->host->{id};
-        my $roster = $self->db->get_roster_host($host_id, $self->stime);
-        $self->roster($roster);
-    }
-
-    return $self->roster ? @{ $self->roster } : ();
 }
 
 sub get_downtimes {
@@ -1176,28 +1163,8 @@ sub check_services {
             # That means: if etime is lower -> sent a SMS
             # And: if the new status is higher -> sent a SMS (maybe the status switched from WARNING to CRITICAL)
             $self->log->notice("no sms send - next sms $next_sms_soft (soft interval)");
-        } else {
-            # Each host has a maximum pool of sms per month.
-            # To improve the performance the counting of sent sms
-            # is moved here, so the sms_count is first selected
-            # from the database if the other conditions above
-            # does not match.
-            if (!defined $host->{sms_count}) {
-                my $sms_count = $self->db->get_sms_count($host->{id});
-                $host->{sms_count} = $sms_count->{count};
-
-                if ($host->{max_sms} > 0) {
-                    if ($host->{sms_count} * 100 / $host->{max_sms} > 90 || $host->{max_sms} - $host->{sms_count} < 5) {
-                        $host->{available_sms_to_low} = 1;
-                    }
-                }
-            }
-            if ($host->{sms_count} >= $host->{max_sms}) {
-                $self->log->notice("reached max_sms $host->{sms_count}/$host->{max_sms}");
-            } else {
-                $self->log->notice("sms will be send");
-                $save_sms = 1;
-            }
+        } elsif (!$self->check_if_max_sms_reached) {
+            $save_sms = 1;
         }
 
         $self->log->notice(
@@ -1231,7 +1198,6 @@ sub check_services {
 
         if ($save_sms || $save_mail) {
             my $contact = $self->db->get_service_contacts($host->{id}, $service_id);
-            push @$contact, $self->get_roster;
 
             if (scalar @$contact) {
                 # At first it will be checked if the service or host
@@ -1311,15 +1277,9 @@ sub check_services {
                         next CONTACT; # skip
                     }
 
-                    # Check if the contact has a valid timeperiod or if the
-                    # contact in configured in a active roster.
-                    if ($c->{is_roster}) {
-                        $self->log->info("check roster-time for contact $c->{name} ($c->{id})");
-                        $do_send = { sms => $c->{send_sms}, mail => $c->{send_mail} };
-                    } else {
-                        $self->log->info("check timeperiod for contact $c->{name} ($c->{id})");
-                        $do_send = $self->is_in_notification_period($c->{id}, $c->{name});
-                    }
+                    # Check if the contact has a valid timeperiod.
+                    $self->log->info("check timeperiod for contact $c->{name} ($c->{id})");
+                    $do_send = $self->is_in_notification_period($c->{id}, $c->{name});
 
                     # Check the escalation level of the contact. If the escalation level
                     # not NULL then the contact wants to be informed every time the soft
@@ -1406,6 +1366,52 @@ sub check_services {
             }
         }
     }
+}
+
+sub check_if_max_sms_reached {
+    my $self = shift;
+    my $host = $self->host;
+    my $company = $self->company;
+
+    if (!defined $host->{sms_count}) {
+        my $host_sms_count = $self->db->get_sms_count(host => $host->{id});
+        my $company_sms_count = $self->db->get_sms_count(company => $host->{company_id});
+        $host->{sms_count} = $host_sms_count->{count};
+        $company->{sms_count} = $company_sms_count->{count};
+    }
+
+    if ($host->{max_sms} && $host->{sms_count} >= $host->{max_sms}) {
+        $self->log->notice("reached host max_sms $host->{sms_count}/$host->{max_sms}");
+        return 1;
+    }
+
+    if ($company->{max_sms} && $company->{sms_count} >= $company->{max_sms}) {
+        $self->log->notice("reached company max_sms $company->{sms_count}/$company->{max_sms}");
+        return 1;
+    }
+
+    $self->log->notice("sms will be send");
+    return undef;
+}
+
+sub check_if_sms_contingent_is_low {
+    my $self = shift;
+    my $host = $self->host;
+    my $company = $self->company;
+
+    if ($host->{max_sms} > 0) {
+        if ($host->{sms_count} * 100 / $host->{max_sms} > 90 || $host->{max_sms} - $host->{sms_count} < 5) {
+            return 1;
+        }
+    }
+
+    if ($company->{max_sms} > 0) {
+        if ($company->{sms_count} * 100 / $company->{max_sms} > 90 || $company->{max_sms} - $company->{sms_count} < 5) {
+            return 2;
+        }
+    }
+
+    return 0;
 }
 
 sub check_service_states {
@@ -2131,102 +2137,27 @@ sub send_sms {
     }
 
     if ($self->maintenance) {
-        $self->log->alert("server runs in maintenance mode, unable to send sms");
+        $self->log->warning("server runs in maintenance mode, unable to send sms");
         return 1;
     }
 
     my $host = $self->host;
-    my $param = $self->config->{smsgateway};
+    my $company = $self->company;
     my $mail = $self->config->{email};
     my %service_id = ();
 
-    if (!$param->{command}) {
+    if (!$self->config->{smsgateway}->{command}) {
         $self->log->notice("sms disabled");
         return 1;
     }
 
     foreach my $sms_to (keys %{ $self->{sms} }) {
-        my $message = "$host->{hostname} $host->{ipaddr}";
-        my $sms = $self->{sms}->{$sms_to};
-        my (@id, $redirect);
+        my ($service_ids, $message) = $self->gen_sms_message($sms_to);
 
-        # Check here the sms_count again because if more than
-        # one contact is configured then the sms counter
-        # increases with each sms that is send.
-        if ($host->{sms_count} >= $host->{max_sms}) {
-            $self->log->notice("no more sms available - $host->{sms_count}/$host->{max_sms}");
-            last;
-        }
-
-        if ($host->{available_sms_to_low}) {
-            $message .= " [$host->{sms_count}/$host->{max_sms} SMS USED]";
-            $host->{sms_count}++;
-        }
-
-        if (@$sms == 1) {
-            $sms = shift @$sms;
-            $message .= " - $sms->{service} $sms->{status} - $sms->{message}";
-            push @id, $sms;
-            $redirect = $sms->{redirect};
-        } else {
-            my (%status, @message, @service);
-
-            foreach my $sms (@$sms) {
-                $status{ $sms->{status} }++;
-                push @id, $sms;
-                push @service, $sms->{service};
-
-                if ($sms->{redirect}) {
-                    $redirect = $sms->{redirect};
-                }
-            }
-
-            foreach my $s (qw/INFO UNKNOWN CRITICAL WARNING OK/) {
-                if (exists $status{$s}) {
-                    push @message, "$s($status{$s})";
-                }
-            }
-
-            $message .= " - " . join(" ", @message);
-            $message .= " - " . join(", ", @service);
-        }
-
-        if ($redirect) {
-            $message = "RAD: $message";
-        }
-
-        if (length($message) > 160) {
-            $message = substr($message, 0, 157) . "...";
-        }
-
-        my $qm = uri_escape($message);
-        my ($command, $response);
-        my $route = $self->company->{sms_route} || "gold";
-        $command = $param->{command};
-        $response = $param->{response};
-        $command =~ s/<route>/$route/;
-        $command =~ s/<to>/$sms_to/;
-        $command =~ s/<message>/$qm/;
-        $command =~ s/%TO%/$sms_to/;
-        $command =~ s/%MESSAGE%/$qm/;
-        $command = "$command 2>&1";
-
-        $self->log->notice("send sms to $sms_to: $message");
-        $self->log->notice($command);
-
-        my $output;
-        eval {
-            local $SIG{__DIE__} = sub { alarm(0) };
-            local $SIG{ALRM} = sub { die "timeout" };
-            alarm(15);
-            $output = qx{$command};
-            alarm(0);
-        };
-
-        if ($@) {
-            $self->log->error("unable to send sms to $sms_to - $@");
-        } elsif (defined $response && $output =~ /$response/) {
+        if ($self->send_sms_to_provider($sms_to, uri_escape($message))) {
             $self->log->notice("sms successfully send");
+            $host->{sms_count}++;
+            $company->{sms_count}++;
 
             $self->db->create_send_sms(
                 $self->etime,
@@ -2238,7 +2169,7 @@ sub send_sms {
 
             # Update "last_sms" first if send was successful,
             # but only if the status is not OK
-            foreach my $id (@id) {
+            foreach my $id (@$service_ids) {
                 if ($id->{status} ne "OK") {
                     $service_id{$id->{service_id}}++;
                 }
@@ -2254,8 +2185,6 @@ sub send_sms {
                     Data => $message,
                 )->send("sendmail", "$mail->{sendmail}");
             }
-        } else {
-            $self->log->error("error send sms to $sms_to: $output");
         }
     }
 
@@ -2263,6 +2192,137 @@ sub send_sms {
         $self->log->notice("update last_sms to", $self->etime);
         $self->db->save_service_status($id, { last_sms => $self->etime, last_sms_time => $self->etime });
     }
+}
+
+sub gen_sms_message {
+    my ($self, $sms_to) = @_;
+    my $host = $self->host;
+    my $message = "$host->{hostname} $host->{ipaddr}";
+    my $sms = $self->{sms}->{$sms_to};
+    my (@service_ids, $redirect);
+
+    # Check here the sms_count again because if more than
+    # one contact is configured then the sms counter
+    # increases with each sms that is send.
+    last if $self->check_inner_if_max_sms_reached;
+
+    if (@$sms == 1) {
+        $sms = shift @$sms;
+        $message .= " - $sms->{service} $sms->{status} - $sms->{message}";
+        push @service_ids, $sms;
+        $redirect = $sms->{redirect};
+    } else {
+        my (%status, @message, @service);
+
+        foreach my $sms (@$sms) {
+            $status{ $sms->{status} }++;
+            push @service_ids, $sms;
+            push @service, $sms->{service};
+
+            if ($sms->{redirect}) {
+                $redirect = $sms->{redirect};
+            }
+        }
+
+        foreach my $s (qw/INFO UNKNOWN CRITICAL WARNING OK/) {
+            if (exists $status{$s}) {
+                push @message, "$s($status{$s})";
+            }
+        }
+
+        $message .= " - " . join(" ", @message);
+        $message .= " - " . join(", ", @service);
+    }
+
+    if ($redirect) {
+        $message = "RAD: $message";
+    }
+
+    if (length($message) > 160) {
+        $message = substr($message, 0, 157) . "...";
+    }
+
+    return (\@service_ids, $message);
+}
+
+sub send_sms_to_provider {
+    my ($self, $sms_to, $message) = @_;
+
+    $self->log->notice("send sms to $sms_to: $message");
+
+    if (!$self->execute_command_to_send_sms(primary => $sms_to => $message)) {
+        if (!$self->execute_command_to_send_sms(failover => $sms_to => $message)) {
+            return undef;
+        }
+    }
+
+    return 1;
+}
+
+sub execute_command_to_send_sms {
+    my ($self, $type, $sms_to, $message) = @_;
+    my $param = $self->config->{smsgateway};
+    my ($command, $response, $route, $output);
+
+    if ($type eq "primary") {
+        $command = $param->{command};
+        $response = $param->{response};
+        $route = $self->company->{sms_route} || "gold";
+    } elsif ($type eq "failover") {
+        if (!$param->{failover_command}) {
+            return undef;
+        }
+        $command = $param->{failover_command};
+        $response = $param->{failover_response};
+        $route = $self->company->{failover_sms_route} || "gold";
+    }
+
+    $command =~ s/<route>/$route/;
+    $command =~ s/<to>/$sms_to/;
+    $command =~ s/<message>/$message/;
+    $command =~ s/%ROUTE%/$route/;
+    $command =~ s/%TO%/$sms_to/;
+    $command =~ s/%MESSAGE%/$message/;
+    $command = "$command 2>&1";
+    $self->log->notice($command);
+
+    eval {
+        local $SIG{__DIE__} = sub { alarm(0) };
+        local $SIG{ALRM} = sub { die "command runs on a timeout after 10 seconds" };
+        alarm(10);
+        $output = qx{$command};
+        alarm(0);
+    };
+
+    if ($@) {
+        $self->log->error("unable to send sms to $sms_to - $@");
+        return undef;
+    }
+
+    if (defined $response && (!defined $output || $output !~ /$response/)) {
+        $self->log->error("error send sms to $sms_to: $output");
+        return undef;
+    }
+
+    return 1;
+}
+
+sub check_inner_if_max_sms_reached {
+    my $self = shift;
+    my $host = $self->host;
+    my $company = $self->company;
+
+    if ($host->{max_sms} && $host->{sms_count} >= $host->{max_sms}) {
+        $self->log->notice("no more host sms available - $host->{sms_count}/$host->{max_sms}");
+        return 1;
+    }
+
+    if ($company->{max_sms} && $company->{sms_count} >= $company->{max_sms}) {
+        $self->log->notice("no more company sms available - $company->{sms_count}/$company->{max_sms}");
+        return 1;
+    }
+
+    return undef;
 }
 
 sub send_mails {
@@ -2273,11 +2333,12 @@ sub send_mails {
     }
 
     if ($self->maintenance) {
-        $self->log->alert("server runs in maintenance mode, unable to send mail");
+        $self->log->warning("server runs in maintenance mode, unable to send mail");
         return 1;
     }
 
     my $host = $self->host;
+    my $company = $self->company;
     my $param = $self->config->{email};
     my $hostname = $self->config->{hostname};
     my (%service_id, @recipients);
@@ -2301,9 +2362,16 @@ sub send_mails {
             $message .= "$host->{comment}\n";
         }
 
-        if ($host->{available_sms_to_low}) {
+        my $low_sms_contingent = $self->check_if_sms_contingent_is_low;
+
+        if ($low_sms_contingent) {
             $message .= "\n=== WARNING ===\n\n";
-            $message .= "$host->{sms_count}/$host->{max_sms} SMS used\n";
+            if ($host->{max_sms}) {
+                $message .= "SMS host contingent: $host->{sms_count}/$host->{max_sms} SMS used\n";
+            }
+            if ($company->{max_sms}) {
+                $message .= "SMS company contingent: $company->{sms_count}/$company->{max_sms} SMS used\n";
+            }
             $message .= "Please increase the maximal allowed SMS per month!\n";
         }
 
@@ -2322,7 +2390,7 @@ sub send_mails {
             }
 
             if ($m->{comment}) {
-                $message .= "Comment:     $m->{comment}\n";
+                $message .= "Comment: $m->{comment}\n";
             }
 
             if (defined $m->{escalation}) {
