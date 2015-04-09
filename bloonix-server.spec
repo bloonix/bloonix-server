@@ -17,6 +17,7 @@ Requires: bloonix-agent
 Requires: bloonix-core
 Requires: bloonix-dbi
 Requires: bloonix-fcgi
+Requires: openssl
 Requires: perl-JSON-XS
 Requires: perl(DBI)
 Requires: perl(DBD::Pg)
@@ -32,7 +33,6 @@ Requires: perl(Sys::Hostname)
 Requires: perl(Time::HiRes)
 Requires: perl(Time::ParseDate)
 Requires: perl(URI::Escape)
-Requires: openssl
 AutoReqProv: no
 
 %description
