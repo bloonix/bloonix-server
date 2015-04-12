@@ -133,9 +133,9 @@ __PACKAGE__->mk_counters(qw/update/);
 # Some constants
 use constant DAEMON_PID => $$;
 use constant SERVER_START => time;
-use constant SRVCHKWAIT => 0;
+use constant SRVCHKWAIT => 90;
 
-our $VERSION = "0.1";
+our $VERSION = "0.2";
 
 sub run {
     my $class = shift;
