@@ -770,7 +770,7 @@ sub get_maintenance {
 
 sub get_locations {
     my $self = shift;
-    my (%locations, $default);
+    my %locations;
 
     my $locations = $self->dbi->fetch(
         $self->sql->select(
@@ -780,13 +780,10 @@ sub get_locations {
     );
 
     foreach my $location (@$locations) {
-        if ($location->{is_default}) {
-            $default = $location;
-        }
         $locations{$location->{id}} = $location;
     }
 
-    return (\%locations, $default);
+    return \%locations;
 }
 
 sub update_agent_version {

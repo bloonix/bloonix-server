@@ -31,12 +31,12 @@ use base qw/Bloonix::Accessor/;
 __PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi sipc client peerhost select/);
 __PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami runtime/);
 __PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime company request request_type host_alive_status/);
-__PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations default_location attempt_max_reached/);
+__PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations attempt_max_reached/);
 __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_service service_interval service_timeout/);
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.24";
+our $VERSION = "0.25";
 
 sub run {
     my $class = shift;
@@ -419,9 +419,7 @@ sub check_locations {
     my $self = shift;
 
     if (!$self->locations) {
-        my ($locations, $default_location) = $self->db->get_locations;
-        $self->locations($locations);
-        $self->default_location($default_location);
+        $self->locations($self->db->get_locations);
     }
 }
 
@@ -469,25 +467,19 @@ sub process_get_services {
             $service->{command_options} = $self->json->decode($service->{command_options});
             $service->{agent_options} = $self->json->decode($service->{agent_options});
 
-            if ($service->{location_options}) {
+            if ($service->{location_options} && scalar keys %{$self->db->get_locations}) {
                 my $location_options = $self->json->decode($service->{location_options});
 
-                if (scalar keys %$location_options) {
-                    my $check_type = $location_options->{check_type};
-
+                if (scalar keys %$location_options && $location_options->{check_type} ne "default") {
                     $service->{location_options} = {
-                        check_type => $check_type,
+                        check_type => $location_options->{check_type},
                         concurrency => $location_options->{concurrency} || 3,
                         locations => []
                     };
 
-                    if ($check_type eq "default") {
-                        push @{$service->{location_options}->{locations}}, $self->default_location;
-                    } else {
-                        foreach my $location (@{$location_options->{locations}}) {
-                            if ($self->locations->{$location}) {
-                                push @{$service->{location_options}->{locations}}, $self->locations->{$location};
-                            }
+                    foreach my $location (@{$location_options->{locations}}) {
+                        if ($self->locations->{$location}) {
+                            push @{$service->{location_options}->{locations}}, $self->locations->{$location};
                         }
                     }
                 }
