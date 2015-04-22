@@ -418,8 +418,11 @@ sub check_request {
 sub check_locations {
     my $self = shift;
 
-    if (!$self->locations) {
+    $self->{location_config_expires} ||= 0;
+
+    if ($self->{location_config_expires} < time) {
         $self->locations($self->db->get_locations);
+        $self->{location_config_expires} = time + 30;
     }
 }
 
