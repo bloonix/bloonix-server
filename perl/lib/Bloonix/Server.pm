@@ -418,12 +418,12 @@ sub check_request {
 sub check_locations {
     my $self = shift;
 
-    $self->{location_config_expires} ||= 0;
+    #$self->{location_config_expires} ||= 0;
 
-    if ($self->{location_config_expires} < time) {
+    #if ($self->{location_config_expires} < time) {
         $self->locations($self->db->get_locations);
-        $self->{location_config_expires} = time + 30;
-    }
+    #    $self->{location_config_expires} = time + 30;
+    #}
 }
 
 sub process_get_services {
