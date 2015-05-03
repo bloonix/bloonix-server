@@ -1,3 +1,9 @@
+bloonix-server (0.26-1) unstable; urgency=low
+
+    * Removed location caching.
+
+ -- Jonny Schulz <js@bloonix.de>  Sun, 03 May 2015 13:53:35 +0200
+
 bloonix-server (0.25-1) unstable; urgency=low
 
     * Kicked default_locations.
