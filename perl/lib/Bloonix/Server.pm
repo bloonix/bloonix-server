@@ -36,7 +36,7 @@ __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_serv
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.25";
+our $VERSION = "0.26";
 
 sub run {
     my $class = shift;
@@ -309,9 +309,9 @@ sub process_request {
 
     if ($self->request->{action} eq "get-services" || $self->request->{action} eq "post-service-data") {
         $self->check_request or return;
-        $self->check_locations;
 
         if ($self->request->{action} eq "get-services") {
+            $self->get_locations;
             $self->process_get_services;
         } elsif ($self->request->{action} eq "post-service-data") {
             $self->process_post_service_data;
@@ -415,15 +415,10 @@ sub check_request {
     return 1;
 }
 
-sub check_locations {
+sub get_locations {
     my $self = shift;
 
-    #$self->{location_config_expires} ||= 0;
-
-    #if ($self->{location_config_expires} < time) {
-        $self->locations($self->db->get_locations);
-    #    $self->{location_config_expires} = time + 30;
-    #}
+    $self->locations($self->db->get_locations);
 }
 
 sub process_get_services {
@@ -470,7 +465,7 @@ sub process_get_services {
             $service->{command_options} = $self->json->decode($service->{command_options});
             $service->{agent_options} = $self->json->decode($service->{agent_options});
 
-            if ($service->{location_options} && scalar keys %{$self->db->get_locations}) {
+            if ($service->{location_options} && scalar keys %{$self->locations}) {
                 my $location_options = $self->json->decode($service->{location_options});
 
                 if (scalar keys %$location_options && $location_options->{check_type} ne "default") {
