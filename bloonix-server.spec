@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.26
+Version: 0.27
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -166,6 +166,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Fri May 08 2015 Jonny Schulz <js@bloonix.de> - 0.27-1
+- Improved rest debugging.
+- Fixed uninitialized warnings messages.
 * Sun May 03 2015 Jonny Schulz <js@bloonix.de> - 0.26-1
 - Removed location caching.
 * Wed Apr 15 2015 Jonny Schulz <js@bloonix.de> - 0.25-1

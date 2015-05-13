@@ -76,13 +76,19 @@ sub get_services {
         $self->sql->select(
             table => [
                 service => "*",
-                service_parameter => "*"
+                service_parameter => "*",
+                plugin => "command"
             ],
             join => [
                 inner => {
                     table => "service_parameter",
                     left => "service.service_parameter_id",
                     right => "service_parameter.ref_id"
+                },
+                inner => {
+                    table => "plugin",
+                    left => "service_parameter.plugin_id",
+                    right => "plugin.id"
                 }
             ],
             condition => [

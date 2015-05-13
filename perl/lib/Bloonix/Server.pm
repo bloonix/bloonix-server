@@ -36,7 +36,7 @@ __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_serv
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.26";
+our $VERSION = "0.27";
 
 sub run {
     my $class = shift;
@@ -1654,6 +1654,14 @@ sub save_es_data {
 
     $data->{time} = $self->mtime;
     $data->{host_id} = $self->host->{id};
+
+    if ($self->log->is_debug) {
+        $self->log->debug("save es data:");
+        $self->log->dump(debug => {
+            path => $path,
+            data => $data
+        });
+    }
 
     $self->rest_post(
         path => $path,

@@ -1,3 +1,8 @@
+bloonix-server (0.27) released at 2015-05-08
+
+    * Improved rest debugging.
+    * Fixed uninitialized warnings messages.
+
 bloonix-server (0.26) released at 2015-05-03
 
     * Removed location caching.
