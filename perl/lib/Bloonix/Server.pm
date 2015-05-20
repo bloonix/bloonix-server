@@ -36,7 +36,7 @@ __PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_serv
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 
-our $VERSION = "0.27";
+our $VERSION = "0.28";
 
 sub run {
     my $class = shift;
@@ -376,9 +376,21 @@ sub process_server_status {
 
 sub check_request {
     my $self = shift;
+    my $request;
 
     $self->log->notice("check authorization");
-    my $request = Bloonix::Server::Validate->request($self->request);
+
+    eval {
+        local $SIG{__DIE__} = "DEFAULT";
+        $request = Bloonix::Server::Validate->request($self->request);
+    };
+
+    if ($@) {
+        $self->log->error($@);
+        $self->response({ status => "err", message => "access denied" });
+        return undef;
+    }
+
     $self->whoami($request->{whoami});
     $self->log->set_pattern("%Y", "Y", "host id $request->{host_id}");
     $self->log->notice("processing request");
