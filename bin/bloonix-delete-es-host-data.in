@@ -112,11 +112,16 @@ sub disconnect_database {
 sub delete_data {
     my $self = shift;
 
-    my $stmt = "select id, hostname, ipaddr, data_retention from host";
+    my $stmt = join(" ",
+        "select host.id, host.hostname, host.ipaddr, host.data_retention, company.data_retention as company_data_retention",
+        "from host",
+        "inner join company on host.company_id = company.id"
+    );
+
     my @bind;
 
     if (@{$self->{host}}) {
-        $stmt .= " where id in (". join(",", map {"?"} @{$self->{host}}) .")";
+        $stmt .= " where id host.in (". join(",", map {"?"} @{$self->{host}}) .")";
         push @bind, @{$self->{host}};
     }
 
@@ -134,10 +139,14 @@ sub delete_data {
 sub delete {
     my ($self, $host) = @_;
 
-    my $time = $self->data_retention_time($host->{data_retention});
+    my $data_retention = $host->{data_retention} > $host->{company_data_retention}
+        ? $host->{company_data_retention}
+        : $host->{data_retention};
+
+    my $time = $self->data_retention_time($data_retention);
 
     $self->log->notice(
-        "processing $host->{id} with a data retention of $host->{data_retention} days"
+        "processing $host->{id} with a data retention of $data_retention days"
     );
 
     my $total = $self->get_total_size($time, $host);

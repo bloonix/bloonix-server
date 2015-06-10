@@ -2,6 +2,7 @@ bloonix-server (0.28) released at 2015-XX-XX
 
     * Prevent to log FATAL messages with a stack trace if the
       request structure of the agent was invalid.
+    * Implemented company.data_retention in bloonix-delete-es-host-data.
 
 bloonix-server (0.27) released at 2015-05-08
 
