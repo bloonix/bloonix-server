@@ -355,7 +355,7 @@ sub update_hosts {
 
     $self->sshexec(
         "system",
-        "/etc/init.d/bloonix-agent reload"
+        "if test -e '/etc/init.d/bloonix-agent' ; then /etc/init.d/bloonix-agent reload ; else systemctl reload bloonix-agent.service ; fi"
     ) or die "unable to reload agent";
 }
 
