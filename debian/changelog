@@ -1,3 +1,9 @@
+bloonix-server (0.29-1) unstable; urgency=low
+
+    * Fixed @@LIBDIR@@ and clean up the wrong directory.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 16 Jun 2015 03:50:52 +0200
+
 bloonix-server (0.28-1) unstable; urgency=low
 
     * Prevent to log FATAL messages with a stack trace if the
