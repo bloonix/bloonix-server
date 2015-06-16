@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.27
+Version: 0.28
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -166,6 +166,10 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Wed Jun 10 2015 Jonny Schulz <js@bloonix.de> - 0.28-1
+- Prevent to log FATAL messages with a stack trace if the
+  request structure of the agent was invalid.
+- Implemented company.data_retention in bloonix-delete-es-host-data.
 * Fri May 08 2015 Jonny Schulz <js@bloonix.de> - 0.27-1
 - Improved rest debugging.
 - Fixed uninitialized warnings messages.

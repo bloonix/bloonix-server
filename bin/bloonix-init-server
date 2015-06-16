@@ -51,3 +51,10 @@ if [ ! -e "/etc/bloonix/database/main.conf" ] ; then
     chown root:bloonix /etc/bloonix/database/main.conf
     chmod 640 /etc/bloonix/database/main.conf
 fi
+
+if [ -e '/@@LIBDIR@@/bloonix/server' ] ; then
+    rmdir '/@@LIBDIR@@/bloonix/server'
+    rmdir '/@@LIBDIR@@/bloonix/ipc'
+    rmdir '/@@LIBDIR@@/bloonix'
+    rmdir '/@@LIBDIR@@'
+fi
