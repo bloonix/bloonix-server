@@ -224,6 +224,18 @@ sub get_service_contacts {
     return \@contact;
 }
 
+sub get_contact_message_services {
+    my ($self, $contact_id) = @_;
+
+    my ($stmt, @bind) = $self->sql->select(
+        table => "contact_message_services",
+        column => "*",
+        condition => [ contact_id => $contact_id ]
+    );
+
+    return $self->dbi->fetch($stmt, @bind);
+}
+
 sub get_active_host_services {
     my ($self, $host_id, $agent_id) = @_;
 
@@ -269,11 +281,15 @@ sub get_active_host_services {
     my $services = $self->dbi->fetch(
         $self->sql->select(
             table => [
-                service => [ "id AS service_id", qw(agent_version last_status last_check status updated force_check) ],
+                service => [ "id AS service_id", qw(
+                    agent_version last_status last_check status
+                    updated force_check attempt_counter
+                    next_check next_timeout
+                )],
                 service_parameter => [qw(
                     agent_id command_options
                     location_options agent_options host_alive_check
-                    interval timeout host_template_id
+                    interval timeout host_template_id attempt_max
                 )],
                 plugin => [qw(command) ]
             ],
@@ -338,7 +354,7 @@ sub get_sms_count {
         return $self->dbi->unique(
             $self->sql->select(
                 count => "*",
-                table => "sms_send",
+                table => "notification",
                 condition => [
                     where => {
                         column => "host_id",
@@ -354,6 +370,11 @@ sub get_sms_count {
                         column => "time",
                         op => "<",
                         value => $to
+                    },
+                    and => {
+                        column => "message_service",
+                        op => "=",
+                        value => "sms"
                     }
                 ]
             )
@@ -363,10 +384,10 @@ sub get_sms_count {
     return $self->dbi->unique(
         $self->sql->select(
             count => "*",
-            table => "sms_send",
+            table => "notification",
             condition => [
                 where => {
-                    column => "host_id",
+                    column => "company_id",
                     op => "=",
                     value => $id
                 },
@@ -379,6 +400,11 @@ sub get_sms_count {
                     column => "time",
                     op => "<",
                     value => $to
+                },
+                and => {
+                    column => "message_service",
+                    op => "=",
+                    value => "sms"
                 }
             ]
         )
@@ -452,7 +478,7 @@ sub get_host_by_auth {
     return undef;
 }
 
-sub save_service_status {
+sub update_service_status {
     my ($self, $id, $status) = @_;
 
     return $self->dbi->do(
@@ -549,13 +575,13 @@ sub get_service_states {
     );
 }
 
-sub disable_force_check {
-    my ($self, $service_id) = @_;
+sub update_force_check {
+    my ($self, $service_id, $value) = @_;
 
     return $self->dbi->do(
         $self->sql->update(
             table  => "service",
-            column => { force_check => 0 },
+            column => { force_check => $value },
             condition => [ id => $service_id ],
         )
     );
@@ -578,12 +604,14 @@ sub create_send_sms {
 
     return $self->dbi->do(
         $self->sql->insert(
-            table  => "sms_send",
+            table  => "notification",
             column => {
                 time => $time,
                 host_id => $host_id,
                 company_id => $company_id,
+                message_service => "sms",
                 send_to => $send_to,
+                subject => "",
                 message => $message
             },
         )
@@ -595,11 +623,12 @@ sub create_send_mail {
 
     return $self->dbi->do(
         $self->sql->insert(
-            table  => "mail_send",
+            table  => "notification",
             column => {
                 time => $time,
                 host_id => $host_id,
                 company_id => $company_id,
+                message_service => "mail",
                 send_to => $send_to,
                 subject => $subject,
                 message => $message
@@ -709,7 +738,7 @@ sub get_timeslices_by_contact_id {
         $self->sql->select(
             table => [
                 timeslice => "*",
-                contact_timeperiod => [qw(type timezone)],
+                contact_timeperiod => [qw(message_service exclude timezone)],
             ],
             join => [
                 inner => {

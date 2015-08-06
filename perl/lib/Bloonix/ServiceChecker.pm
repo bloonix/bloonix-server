@@ -127,15 +127,14 @@ use Log::Handler;
 
 # Some accessors
 use base qw(Bloonix::Accessor);
-__PACKAGE__->mk_accessors(qw/config log dbi done children io/);
+__PACKAGE__->mk_accessors(qw/children config dbi dbi_lock done io log sql stmt/);
 __PACKAGE__->mk_counters(qw/update/);
 
 # Some constants
 use constant DAEMON_PID => $$;
 use constant SERVER_START => time;
-use constant SRVCHKWAIT => 90;
 
-our $VERSION = "0.2";
+our $VERSION = "0.4";
 
 sub run {
     my $class = shift;
@@ -164,6 +163,8 @@ sub init {
     $self->log->config(config => $config->{logger});
     $self->set_sigs;
     $self->dbi(Bloonix::DBI->new($config->{database}));
+    $self->dbi_lock(Bloonix::DBI->new($config->{database}));
+    $self->sql($self->dbi->sql);
     $self->children({});
     $self->io(Bloonix::IO::SIPC->new($config->{server}));
 }
@@ -204,12 +205,12 @@ sub daemonize {
     # Wait after a fresh start.
     $self->log->notice(
         "service checker freshly startet,",
-        "giving the agents", SRVCHKWAIT,
+        "giving the agents", $self->config->{srvchkwait},
         "seconds time to re-connect"
     );
 
-    while (SERVER_START + SRVCHKWAIT > time && $self->done == 0) {
-        $self->log->notice(SERVER_START + SRVCHKWAIT - time, "seconds left");
+    while (SERVER_START + $self->config->{srvchkwait} > time && $self->done == 0) {
+        $self->log->notice(SERVER_START + $self->config->{srvchkwait} - time, "seconds left");
         sleep 5;
     }
 
@@ -328,12 +329,12 @@ sub run_service_checker {
     $SIG{CHLD} = "DEFAULT";
 
     $self->log->notice("service checker started");
-    $self->dbi->connect;
 
     while (!$self->done) {
         eval {
             $self->log->notice("checking services");
             $self->dbi->reconnect;
+            $self->dbi_lock->reconnect;
 
             while (my $services = $self->get_timed_out_host_services) {
                 my (%data, $host);
@@ -347,15 +348,13 @@ sub run_service_checker {
                             whoami => "srvchk",
                             version => $VERSION,
                             host_id => $host->{id},
-                            password => $host->{password},
+                            password => $host->{password}
                         );
                     }
 
-                    my $service_id = $service->{id};
-
                     $data{data}{$service->{id}} = {
                         status  => "CRITICAL",
-                        message => "Service check timeout after $host->{timeout}s (host/agent dead?)"
+                        message => "Next service check is overdue! Is the host or Bloonix agent dead?"
                     };
                 }
 
@@ -381,52 +380,66 @@ sub run_service_checker {
 sub get_timed_out_host_services {
     my $self = shift;
     my $time = time;
+    my $services;
 
     # This string should be unique.
     my $unistr = join(".", $$, $self->update(1), Sys::Hostname::hostname);
     $unistr = substr($unistr, 0, 50);
 
-    my $stmt_update = join(" ",
-        "update service set next_check_timeout = ?, next_check_id = ?",
-        "where host_id in (",
-            "select service.host_id",
-            "from service",
-            "inner join host on service.host_id = host.id",
-            "inner join service_parameter on service.service_parameter_id = service_parameter.ref_id",
-            "where service.message != ?",
-            "and service.next_check_timeout <= ?",
-            "and service_parameter.passive_check = ?",
-            "and (",
-                "(service_parameter.interval > 0 and service_parameter.timeout > 0 and service.last_check + service_parameter.interval + service_parameter.timeout <= ?)",
-                "or (service_parameter.interval > 0 and service_parameter.timeout = 0 and service.last_check + service_parameter.interval + host.timeout <= ?)",
-                "or (service_parameter.interval = 0 and service_parameter.timeout > 0 and service.last_check + host.interval + service_parameter.timeout <= ?)",
-                "or (service_parameter.interval = 0 and service_parameter.timeout = 0 and service.last_check + host.interval + host.timeout <= ?)",
-            ")",
-            "order by service.next_check_timeout asc",
-            "limit 1",
-        ")"
-    );
+    eval {
+        $self->dbi_lock->autocommit(0);
+        $self->dbi_lock->begin;
+        $self->dbi_lock->lock("lock_srvchk");
 
-    my $stmt_select = join(" ",
-        "select service.id, service.host_id",
-        "from service",
-        "inner join host on service.host_id = host.id",
-        "inner join service_parameter on service.service_parameter_id = service_parameter.ref_id",
-        "where next_check_id = ?",
-        "and service.message != ?",
-        "and service.next_check_timeout = ?",
-        "and (",
-            "(service_parameter.interval > 0 and service_parameter.timeout > 0 and service.last_check + service_parameter.interval + service_parameter.timeout <= ?)",
-            "or (service_parameter.interval > 0 and service_parameter.timeout = 0 and service.last_check + service_parameter.interval + host.timeout <= ?)",
-            "or (service_parameter.interval = 0 and service_parameter.timeout > 0 and service.last_check + host.interval + service_parameter.timeout <= ?)",
-            "or (service_parameter.interval = 0 and service_parameter.timeout = 0 and service.last_check + host.interval + host.timeout <= ?)",
-        ")"
-    );
+        my $service = $self->dbi->unique(qq{
+            select host_id
+            from service
+            where next_timeout <= ?
+            and next_timeout != '0'
+            order by next_timeout asc
+            limit 1
+        }, $time);
 
-    $self->dbi->do($stmt_update, $time + 60, $unistr, "waiting for initialization", $time, 0, $time, $time, $time, $time);
-    my $services = $self->dbi->fetch($stmt_select, $unistr, "waiting for initialization", $time + 60, $time, $time, $time, $time);
+        if ($service) {
+            $services = $self->dbi->fetch(qq{
+                select id, host_id
+                from service
+                where host_id = ?
+                and next_timeout <= ?
+                and next_timeout != '0'
+            }, $service->{host_id}, $time);
 
-    # Return undef is necessary for the while loop!
+            if (@$services) {
+                my $service_ids = [ map { $_->{id} } @$services ];
+
+                $self->dbi->do(
+                    $self->sql->update(
+                        table => "service",
+                        # Force next timeout to time + 60 seconds and try
+                        # again after 60 seconds if the bloonix server is
+                        # dead. The bloonix server will set the next timeout
+                        # to time + 300 seconds.
+                        data => { next_timeout => $time + 60 },
+                        condition => [ id => $service_ids ]
+                    )
+                );
+            }
+        }
+
+        $self->dbi_lock->commit;
+        $self->dbi_lock->unlock("lock_srvchk");
+        $self->dbi_lock->autocommit(1);
+    };
+
+    if ($@) {
+        eval {
+            $self->dbi_lock->unlock("srvchk");
+            $self->dbi_lock->autocommit(1);
+        };
+        $self->dbi_lock->disconnect;
+        return undef;
+    }
+
     return $services && @$services ? $services : undef;
 }
 
@@ -437,18 +450,18 @@ sub get_host_by_id {
         $self->dbi->sql->select(
             table => [
                 host => [qw(id timeout)],
-                host_secret => "password",
+                host_secret => "password"
             ],
             join => [
                 inner => {
                     table => "host_secret",
                     left  => "host.id",
-                    right => "host_secret.host_id",
+                    right => "host_secret.host_id"
                 }
             ],
             condition => [
-                "host.id" => $host_id,
-            ],
+                "host.id" => $host_id
+            ]
         )
     );
 }
@@ -459,12 +472,12 @@ sub validate_args {
     my %opts = Params::Validate::validate(@_, {
         config_file => {
             type => Params::Validate::SCALAR,
-            default => "/etc/bloonix/srvchk/main.conf",
+            default => "/etc/bloonix/srvchk/main.conf"
         },
         pid_file => {
             type => Params::Validate::SCALAR,
-            default => "/var/run/bloonix/blxchk.pid",
-        },
+            default => "/var/run/bloonix/blxchk.pid"
+        }
     });
 
     return \%opts;
@@ -483,26 +496,31 @@ sub validate_main {
         workers => {
             type => Params::Validate::SCALAR,
             default => 3,
-            regex => qr/^\d+\z/,
+            regex => qr/^\d+\z/
         },
         user => {
             type => Params::Validate::SCALAR,
-            default => "bloonix",
+            default => "bloonix"
         },
         group => {
             type => Params::Validate::SCALAR,
-            default => "bloonix",
+            default => "bloonix"
         },
         server => {
-            type => Params::Validate::HASHREF,
+            type => Params::Validate::HASHREF
         },
         database => {
-            type => Params::Validate::HASHREF,
+            type => Params::Validate::HASHREF
         },
         logger => {
             type => Params::Validate::HASHREF,
-            optional => 1,
+            optional => 1
         },
+        srvchkwait => {
+            type => Params::Validate::SCALAR,
+            regex => qr/^\d+\z/,
+            default => 90
+        }
     });
 
     my $server = $opts{server};

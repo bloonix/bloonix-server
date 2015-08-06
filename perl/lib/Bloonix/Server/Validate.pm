@@ -17,7 +17,7 @@ sub main {
 
     my %opts = Params::Validate::validate(@_, {
         proc_manager => {
-            type => Params::Validate::HASHREF,
+            type => Params::Validate::HASHREF
         },
         server_status => {
             type => Params::Validate::HASHREF,
@@ -33,30 +33,30 @@ sub main {
         },
         timezone => {
             type => Params::Validate::SCALAR,
-            default => "Europe/Berlin",
+            default => "Europe/Berlin"
         },
         user => {
             type => Params::Validate::SCALAR,
-            default => "bloonix",
+            default => "bloonix"
         },
         group => {
             type => Params::Validate::SCALAR,
-            default => "bloonix",
+            default => "bloonix"
         },
         hostname => {
             type => Params::Validate::SCALAR,
-            default => Sys::Hostname::hostname(),
+            default => Sys::Hostname::hostname()
         },
         elasticsearch => {
             type => Params::Validate::HASHREF,
-            default => { },
+            default => { }
         },
         database => {
-            type => Params::Validate::HASHREF,
+            type => Params::Validate::HASHREF
         },
         logger => {
             type => Params::Validate::HASHREF,
-            optional => 1,
+            optional => 1
         },
         elasticsearch_roll_forward => {
             type => Params::Validate::SCALAR,
@@ -64,18 +64,23 @@ sub main {
         },
         smsgateway => {
             type => Params::Validate::HASHREF,
-            optional => 1,
-        },
-        redirect_remote_agent_timeouts => {
-            type => Params::Validate::HASHREF,
-            default => { },
+            optional => 1
         },
         email => {
             type => Params::Validate::HASHREF,
+            optional => 1
+        },
+        notifications => {
+            type => Params::Validate::HASHREF,
+            optional => 1
+        },
+        redirect_remote_agent_timeouts => {
+            type => Params::Validate::HASHREF,
+            default => { }
         },
         allow_from => {
             type => Params::Validate::SCALAR | Params::Validate::ARRAYREF,
-            default => [ '^127\.0\.0\.1\z' ],
+            default => [ '^127\.0\.0\.1\z' ]
         },
     });
 
@@ -84,12 +89,15 @@ sub main {
         $opts{allow_from} = [ split /,/, $opts{allow_from} ];
     }
 
-    $opts{email} = $class->email($opts{email});
-
-    if ($opts{smsgateway}) {
-        $opts{smsgateway} = $class->smsgateway($opts{smsgateway});
+    if ($opts{email}) {
+        $opts{notifications}{mail} = delete $opts{email};
     }
 
+    if ($opts{smsgateway}) {
+        $opts{notifications}{sms} = delete $opts{smsgateway};
+    }
+
+    $class->notifications($opts{notifications});
     $opts{redirect_remote_agent_timeouts} = $class->redirect_remote_agent_timeouts($opts{redirect_remote_agent_timeouts});
 
     $opts{elasticsearch_roll_forward} = {
@@ -193,7 +201,17 @@ sub server_status {
     return \%opts;
 }
 
-sub email {
+sub notifications {
+    my ($class, $notification) = @_;
+
+    $notification->{mail} = $class->mail($notification->{mail} // {});
+
+    if ($notification->{sms}) {
+        $notification->{sms} = $class->sms($notification->{sms});
+    }
+}
+
+sub mail {
     my $class = shift;
 
     my %opts = Params::Validate::validate(@_, {
@@ -218,7 +236,7 @@ sub email {
     return \%opts;
 }
 
-sub smsgateway {
+sub sms {
     my $class = shift;
 
     my %opts = Params::Validate::validate(@_, {

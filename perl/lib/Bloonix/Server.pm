@@ -2,16 +2,13 @@ package Bloonix::Server;
 
 use strict;
 use warnings;
-use Params::Validate qw();
-use Fcntl qw(:flock);
 use JSON;
 use IO::Select;
-use Math::BigInt;
 use Math::BigFloat;
 use MIME::Lite;
 use POSIX qw(getgid getuid setgid setuid);
-use Time::HiRes;
-use URI::Escape;
+use Time::HiRes qw();
+use URI::Escape qw();
 
 use Log::Handler;
 use Log::Handler::Output::File;
@@ -28,13 +25,15 @@ use Bloonix::Timeperiod;
 use Bloonix::REST;
 
 use base qw/Bloonix::Accessor/;
-__PACKAGE__->mk_accessors(qw/config log tlog ipc db done mail rest statbyprio json proc proc_helper fcgi cgi sipc client peerhost select/);
-__PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies whoami runtime/);
-__PACKAGE__->mk_accessors(qw/host plugin plugin_stats stime etime mtime company request request_type host_alive_status/);
-__PACKAGE__->mk_accessors(qw/force_timed_event_entry es_index maintenance locations attempt_max_reached/);
-__PACKAGE__->mk_accessors(qw/service_status_duration service_id c_service n_service service_interval service_timeout/);
+__PACKAGE__->mk_accessors(qw/config log tlog ipc db done rest json proc proc_helper fcgi cgi sipc client peerhost select/);
+__PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies service_has_active_dependency/);
+__PACKAGE__->mk_accessors(qw/host stime etime mtime company request request_type host_down whoami runtime max_sms_reached sms_enabled/);
+__PACKAGE__->mk_accessors(qw/force_timed_event es_index maintenance locations plugin plugin_def plugin_stat/);
+__PACKAGE__->mk_accessors(qw/service_status service_status_duration service_id c_service n_service c_status n_status service_interval service_timeout/);
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
 __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
+__PACKAGE__->mk_array_accessors(qw/event_tags/);
+__PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
 our $VERSION = "0.30";
 
@@ -110,7 +109,7 @@ sub init {
     $self->hang_up;
     $self->init_logger;
     $self->init_math_objects;
-    $self->statbyprio({qw(OK 0 INFO 5 WARNING 10 CRITICAL 20 UNKNOWN 30)});
+    $self->stat_by_prio->set(qw(OK 0 INFO 5 WARNING 10 CRITICAL 20 UNKNOWN 30));
     $self->rest(Bloonix::REST->new($self->config->{elasticsearch}));
     $self->rest->utf8(1);
     $self->db(Bloonix::Server::Database->new($self->config->{database}));
@@ -171,8 +170,8 @@ sub init_math_objects {
 ###############################################################################################
 # Protocol:
 #
-#   REQ: a request has an action (gimme data)
-#   RES: the response has a status (ok, err) and a message or data
+#   REQ (request): a request has an action (gimme data)
+#   RES (response): the response has a status (ok, err) and a message or data
 #
 #   ping:
 #
@@ -568,39 +567,33 @@ sub get_services {
     $self->update_agent_version($services);
 
     foreach my $service (@$services) {
+        my $counter = "$service->{attempt_counter}/$service->{attempt_max}";
+        $service->{retry_interval} ||= $self->host->{retry_interval};
         $service->{interval} ||= $self->host->{interval};
         $service->{timeout} ||= $self->host->{timeout};
 
-        # When a check is forced:
-        #
-        #   - if the interval is exceeded
-        #   - if a check is forced over the webgui
-        #   - if the status is WARNING|CRITICAL|UNKNOWN
-        #
-        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is between
-        # 60 and 43200 seconds, then a interval of 60 seconds is forced.
-        #
-        # If the status is WARNING|CRITICAL|UNKNOWN and if the interval is higher than
-        # or equal 43200 seconds, then a interval of 300 seconds is forced.
-
         if ($service->{force_check}) {
             $self->log->info("service $service->{service_id} check forced");
-            $self->db->disable_force_check($service->{service_id});
+            $self->db->update_force_check($service->{service_id}, 0);
             push @services, $service;
-        } elsif ($service->{last_check} + $service->{interval} <= $self->etime) {
-            $self->log->info("service $service->{service_id} is ready");
+        } elsif ($service->{status} eq "OK") {
+            if ($service->{last_check} + $service->{interval} <= $self->etime) {
+                $self->log->info("service $service->{service_id} is ready");
+                push @services, $service;
+            }
+        } elsif ($service->{attempt_counter} < $service->{attempt_max}) {
+            if ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
+                $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry $service->{retry_interval}s)");
+                push @services, $service;
+            }
+        } elsif ($service->{retry_interval} < 60) {
+            if ($service->{last_check} + 60 <= $self->etime) {
+                $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry 60s fixed)");
+                push @services, $service;
+            }
+        } elsif ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
+            $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry $service->{retry_interval})");
             push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 60 && $service->{interval} < 43200 && $service->{last_check} + 60 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 43200 && $service->{interval} < 86400 && $service->{last_check} + 300 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } elsif ($service->{status} ne "OK" && $service->{interval} >= 86400 && $service->{last_check} + 600 <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready");
-            push @services, $service;
-        } else {
-            $self->log->info("service $service->{service_id} is not ready");
         }
     }
 
@@ -611,7 +604,6 @@ sub process_post_service_data {
     my $self = shift;
     $self->log->notice("send data for host id", $self->request->{host_id});
     $self->response({ status => "ok", message => "processing data" });
-    $self->{set_next_check} = $self->request->{whoami} eq "srvchk" ? 1 : 0;
     $self->process_data;
 }
 
@@ -625,42 +617,30 @@ sub process_data {
     # If no services are configured... just return!
     if (!$host_services) {
         $self->log->info("no services configured");
-        sleep 5;
         return 1;
     }
 
     # Clear the message buffer
-    $self->{mails} = { };
-    $self->{sms}   = { };
+    $self->{notifications} = {};
 
     # Clear and reuse the object buffers
     $self->host_downtime(undef);
     $self->service_downtime(undef);
     $self->dependencies({});
-    $self->attempt_max_reached({});
+    $self->attempt_max_reached->reset;
     $self->get_downtimes;
     $self->host_services($host_services);
-    $self->host_alive_status("NULL");
+    $self->check_host_alive_status($data);
     $self->maintenance($self->db->get_maintenance);
-
-    # Search for a service that is defined as check-host-alive
-    # and store the status of the check.
-    if (exists $host_services->{host_alive_check}) {
-        $self->host_alive_status($host_services->{host_alive_check}->{status});
-    } else {
-        $self->host_alive_status("NULL");
-    }
-
-    # Log the host alive status
-    $self->log->notice("host alive status:", $self->host_alive_status);
+    $self->max_sms_reached(undef);
+    $self->plugin_def(undef);
+    $self->plugin_stat(undef);
 
     # Validate, check and store the service data
     $self->validate_data($data) or return undef;
     $self->check_services($data);
     $self->update_host_status;
-    $self->store_stats($data);
-    $self->send_sms;
-    $self->send_mails;
+    $self->send_notifications;
 }
 
 sub get_downtimes {
@@ -797,583 +777,632 @@ sub validate_data {
     return 1;
 }
 
+sub check_host_alive_status {
+    my ($self, $data) = @_;
+    my $services = $self->host_services;
+    my $affected_services = scalar keys %$services;
+
+    $self->host_down(0);
+
+    foreach my $service_id (keys %$services) {
+        if ($services->{$service_id}->{host_alive_check} == 1) {
+            if (exists $data->{$service_id}) {
+                if ($data->{$service_id}->{status} =~ /CRITICAL|UNKNOWN/) {
+                    $self->host_down(1);
+                    $data->{$service_id}->{message} = join(" ",
+                        "[HOST ALIVE STATUS IS",
+                        $data->{$service_id}->{status},
+                        "WITH $affected_services AFFECTED SERVICES]",
+                        $data->{$service_id}->{message},
+                    );
+                }
+            } elsif ($services->{$service_id}->{status} =~ /CRITICAL|UNKNOWN/) {
+                $self->host_down(1);
+            }
+        }
+    }
+}
+
 sub check_services {
     my ($self, $data) = @_;
-    my $host = $self->host;
-    my $host_id = $host->{id};
-    my $services = $self->host_services;
-    my %contacts = ();
-
-    # Pre-check the host-alive-status if the check is found.
-    # This is necessary because the %$data hash is looped
-    # unsorted, so if the host-alive-status is checked at last
-    # then each service that was checked before the host-alive-check
-    # is marked without the HOST DOWN notification. It's better
-    # to intercept this.
-    if (exists $data->{host_alive_check}) {
-        $self->host_alive_status($data->{host_alive_check}->{status});
-    }
 
     $self->log->notice("check the status of services");
 
-    my $today_date = $self->year_month_stamp;
-
-    CHECK: # Bloonix-Notification-Workflow
+    CHECK:
     foreach my $service_id (keys %$data) {
-        # n_service = new service data
-        # c_service = current service data
-        my $n_service  = $data->{$service_id};
-        my $c_service  = $services->{$service_id};
-
-        # MAINTENANCE
-        if ($self->maintenance && $n_service->{status} ne "OK") {
-            $n_service->{message} = "[MAINTENANCE (true status: $n_service->{status})] $n_service->{message}";
-            $n_service->{status} = "INFO";
-        }
-
-        # Service informations
-        my $n_status = $n_service->{status}; # new status
-        my $c_status = $c_service->{status}; # current status
-        my $a_status = $c_service->{highest_attempt_status};
-        my $interval = $c_service->{interval} || $host->{interval};
-        my $timeout = $c_service->{timeout} || $host->{timeout};
-
-        # Force an event if the month switched and no event was stored
-        # in the current month.
-        my $last_event_date = $self->year_month_stamp($c_service->{last_event});
-
-        # Save event tags
-        my @event_tags;
-
-        # Accessors
-        $self->n_service($n_service);
-        $self->c_service($c_service);
+        $self->event_tags->clear;
+        $self->service_has_active_dependency(0);
         $self->service_id($service_id);
-        $self->service_interval($interval);
-        $self->service_timeout($timeout);
-        $self->service_status_duration($self->etime - $c_service->{status_since});
-        $self->force_timed_event_entry($last_event_date ne $today_date);
-        $self->attempt_max_reached->{$service_id} = 0;
+        $self->n_service($data->{$service_id});
+        $self->n_status($self->n_service->{status});
+        $self->c_service($self->host_services->{$service_id});
+        $self->c_status($self->c_service->{status});
+        $self->service_interval($self->c_service->{interval} || $self->host->{interval});
+        $self->service_timeout($self->c_service->{timeout} || $self->host->{timeout});
+        $self->service_status_duration($self->etime - $self->c_service->{status_since});
+        $self->check_last_event;
 
-        if ($n_service->{advanced_status}) {
-            $n_service->{result} = delete $n_service->{advanced_status};
-        }
-
-        if ($n_service->{message} =~ /Bloonix.+agent\s+dead/) {
-            push @event_tags, "agent dead";
-        }
-
-        if ($n_service->{message} =~ /timeout|timed out/) {
-            push @event_tags, "timeout";
-        }
-
-        if ($self->etime - $c_service->{last_event} > 31_536_000) {
-            my $num = $self->etime - $c_service->{last_event};
-            $self->log->error("last event ($num) is higher than 31_536_000");
-            $self->log->dump(error => $c_service);
-        }
-
-        # Let's go
-        $self->log->notice("checking service $service_id command $c_service->{command} with status $n_status");
-        $self->check_service_states;
-
-        if ($self->check_if_host_or_service_not_active) {
-            next CHECK;
-        }
-        if ($self->check_if_downtime_is_active) {
-            next CHECK;
-        }
-        if ($self->check_if_srvchk_remote_error) {
-            next CHECK;
-        }
-
-        if ($c_service->{host_alive_check} && $self->host_alive_status =~ /CRITICAL|UNKNOWN/) {
-            # Disable temporary the notifications if the host-alive-status is critical
-            # or unknown. On this way the real service status and the statistics can be
-            # stored without send a notfication. In addion the parameter highest_attempt_status
-            # should control that a notification is not send after the service is OK again.
-            $c_service->{notification} = 0;
-            $n_service->{message} = "[HOST DOWN] $n_service->{message}";
-        }
-
-        if ($c_service->{host_alive_check} && $n_status =~ /CRITICAL|UNKNOWN/) {
-            my $affected_services = scalar keys %$services;
-            $n_service->{message} = "[HOST ALIVE STATUS IS $n_status WITH $affected_services AFFECTED SERVICES] $n_service->{message}";
-        }
-
-        # Store new status data
-        my %status = (message => $n_service->{message});
-
-        foreach my $key (qw/result debug/) {
-            if ($n_service->{$key}) {
-                $status{$key} = ref $n_service->{$key}
-                    ? $self->json->encode($n_service->{$key})
-                    : $n_service->{$key};
-            } else {
-                $status{$key} = "";
-            }
-        }
-
-        if ($c_service->{scheduled} == 1) {
-            $status{scheduled} = 0;
-        }
-
-        # status_nok_since:
-        #     ok = OK | INFO
-        #    nok = WARNING | CRITICAL | UNKNOWN
-        # status_since
-        #    The time in epoch since the service is in this status
-        if ($c_status ne $n_status) {
-            my $cs_is_ok = $c_status =~ /^(OK|INFO)\z/;
-            my $ns_is_ok = $n_status =~ /^(OK|INFO)\z/;
-
-            if (($cs_is_ok && !$ns_is_ok) || (!$cs_is_ok && $ns_is_ok)) {
-                $status{status_nok_since} = $self->etime;
-            }
-
-            $status{status_since} = $self->etime;
-        }
-
-        # Just some short variables
-        my $is_volatile = $c_service->{is_volatile}; # is this a volatile status?
-        my $volatile_status = $c_service->{volatile_status}; # has become the service volatile?
-        my $volatile_retain = $c_service->{volatile_retain};
-        my $volatile_since = $c_service->{volatile_since};
-        my $volatile_time = $volatile_retain + $volatile_since;
-
-        # If the status is not OK and if the volatile_status flag is not set
-        if ($n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
-            if ($is_volatile && !$volatile_status) {
-                $self->log->info("set service in volatile status since", $self->etime);
-                $status{volatile_status} = 1;
-                $status{volatile_since} = $self->etime;
-            }
-        }
-
-        # If the volatile_status flag is set and the retain time is not expired
-        if ($is_volatile && $volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
-            $self->log->info("unable to set the status to OK because service is in volatile status");
-            push @event_tags, "volatile";
-            $status{volatile_status} = 1;
-        }
-
-        # Manipulate the volatile status because the status must be hold
-        if ($status{volatile_status}) {
-            if ($self->statbyprio->{$n_status} < $self->statbyprio->{$c_status}) {
-                $self->log->info("overwrite service status from $n_status to volatile status $c_status");
-                $status{status} = $n_service->{status} = $n_status = $c_status;
-            }
-            $status{message} = "[VOLATILE] $status{message}";
-        }
-
-        # Check if the status is OK and reset some parameter
-        if ($n_status eq "OK") {
-            if ($volatile_status) {
-                $status{volatile_status} = 0;
-            }
-
-            if ($volatile_since) {
-                $status{volatile_since}  = 0;
-            }
-
-            if ($c_service->{attempt_counter} > 1) {
-                $status{attempt_counter} = 1;
-            }
-
-            if ($c_service->{last_mail} > 0) {
-                $status{last_mail} = 0;
-            }
-
-            if ($c_service->{last_sms} > 0) {
-                $status{last_sms}  = 0;
-            }
-
-            if ($c_service->{acknowledged} == 1) {
-                $status{acknowledged} = 0;
-                $status{acknowledged_comment} = "auto cleared";
-            }
-
-            if ($c_service->{status_dependency_matched} > 0) {
-                $status{status_dependency_matched} = 0;
-            }
-        }
-
-        # Check if the status is WARNING, CRITICAL or UNKNOWN
-        if ($n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
-            if ($c_service->{attempt_counter} == $c_service->{attempt_max}) {
-                $self->attempt_max_reached->{$service_id} = 1;
-            } elsif ($c_service->{attempt_counter} > $c_service->{attempt_max}) {
-                $status{attempt_counter} = $c_service->{attempt_max};
-                $c_service->{attempt_counter} = $c_service->{attempt_max};
-            } elsif ($c_service->{attempt_counter} < $c_service->{attempt_max} && $c_status ne "OK") {
-                $status{attempt_counter} = 1 + $c_service->{attempt_counter};
-                $c_service->{attempt_counter} = 1 + $c_service->{attempt_counter};
-            }
-
-            if ($n_status eq "WARNING") {
-                if ($c_service->{attempt_counter} == $c_service->{attempt_max}) {
-                    if ($c_service->{attempt_warn2crit} == 1) {
-                        $self->log->notice("attempt_max exceeded, status critical");
-                        $n_service->{status} = $n_status = "CRITICAL";
-                    }
-                }
-            }
-        }
-
-        # At first check if the service flaps between states.
-        # fd_enabled fd_time_range fd_count_max
-        my $flapping;
-        if ($c_service->{fd_enabled} == 1) {
-            my $flap_count = $self->get_service_flaps_by_time(
-                $host_id,
-                $c_service->{id},
-                $self->etime - $c_service->{fd_time_range},
-                $self->etime
-            );
-
-            $self->log->notice("FLAP COUNT $service_id $flap_count");
-            if ($flap_count >= $c_service->{fd_flap_count}) {
-                $self->log->notice("service $c_service->{id} is flapping - count $flap_count");
-                $status{message} = "[SERVICE IS FLAPPING BETWEEN STATES] $status{message}";
-                $flapping = 1;
-            }
-        }
-
-        if ($flapping) {
-            $status{flapping} = 1;
-            push @event_tags, "flapping";
-        } elsif ($c_service->{flapping}) {
-            $status{flapping} = 0;
-        }
-
-        # Save the new status to the event table of the host and
-        # to the global events table
-        if (
-            $n_status ne $c_status
-            || $self->force_timed_event_entry
-            || ($n_status !~ /^(OK|INFO)\z/ && !$self->attempt_max_reached->{$service_id})
-        ) {
-            $self->log->notice("EVENT STATUS $n_status SERVICE $service_id MESSAGE $n_service->{message}");
-            $status{last_event} = $self->etime;
-
-            $self->save_event(
-                message => $status{message},
-                tags => join(",", @event_tags),
-                attempts => "$c_service->{attempt_counter}/$c_service->{attempt_max}"
-            );
-        }
-
-        # The option highest_attempt_status is used to store the highest status
-        # for the last notification that was send. That means if the status is
-        # not OK and attempt_max is reached then the status will be saved to
-        # "highest_attempt_status". Then, if the status fall back to OK again,
-        # and a high status is saved to "highest_attempt_status", it's necessary
-        # to send a OK notification because the admin wants to know if all is ok.
-        if (
-            $n_status eq "OK"
-            || (
-                $n_status ne "INFO"
-                && $c_service->{attempt_counter} >= $c_service->{attempt_max}
-                && $self->statbyprio->{$a_status} < $self->statbyprio->{$n_status}
-               )
-        ) {
-            $status{highest_attempt_status} = $n_status;
-        }
-
-        $self->log->notice("save new service status - $n_status $n_service->{message}");
-        $self->save_service_status(\%status);
-
-        # Do nothing if the status doesn't changed
-        if ($n_status eq "OK" && $c_status eq "OK") {
-            next CHECK;
-        }
-
-        # If the new status is OK and highest_attempt_status is
-        # OK too then it's not necessary to send a notification.
-        if ($n_status eq "OK" && $a_status eq "OK") {
-            next CHECK;
-        }
-
-        # No notification if notifications are disabled
-        if ($host->{notification} == 0 || $c_service->{notification} == 0) {
-            $self->log->notice("notifications disabled");
-            next CHECK;
-        }
-
-        # No notification if the status isn't changed and
-        # the status is acknowledged
-        if ($n_status eq $c_status && $c_service->{acknowledged} == 1) {
-            $self->log->notice("service status is acknowledged");
-            next CHECK;
-        }
-
-        #if ($n_status ne "OK" && $c_service->{attempt_counter} < $c_service->{attempt_max}) {
-        # In any case a notification will only be send if
-        # attempt_counter reached attempt_max.
-        if ($c_service->{attempt_counter} < $c_service->{attempt_max}) {
-            if ($flapping) {
-                $self->log->notice("attempt max not reached, but service is flapping between states");
-            } else {
-                $self->log->notice("attempt max not reached, just a soft state");
-                next CHECK;
-            }
-        }
-
-        # last_mail_time and last_sms_time are the timestamps when
-        # the last notification was send. last_mail and last_sms
-        # is the same but will be set back to 0 if the state of
-        # the service was ok.
-        my $next_mail_hard = $c_service->{last_mail_time} + $c_service->{mail_hard_interval};
-        my $next_sms_hard  = $c_service->{last_sms_time}  + $c_service->{sms_hard_interval};
-        my $next_mail_soft = $c_service->{last_mail}      + $c_service->{mail_soft_interval};
-        my $next_sms_soft  = $c_service->{last_sms}       + $c_service->{sms_soft_interval};
-        my $next_mail_flap = $c_service->{last_mail_time} + $c_service->{mail_soft_interval};
-        my $next_sms_flap  = $c_service->{last_sms_time}  + $c_service->{sms_soft_interval};
-        my ($save_sms, $save_mail);
-
-        $self->log->info("check if a sms or email must be send");
+        $self->service_status({
+            status => $self->n_service->{status},
+            message => $self->n_service->{message},
+            last_check => $self->etime
+        });
 
         $self->log->notice(
-            "last_sms=$c_service->{last_sms}",
-            "last_sms_time=$c_service->{last_sms_time}",
-            "sms_soft_interval=$c_service->{sms_soft_interval}",
-            "sms_hard_interval=$c_service->{sms_hard_interval}"
+            "start checking",
+            "service id", $service_id,
+            "command", $self->c_service->{command},
+            "status", $self->n_service->{status}
         );
 
-        # Now check if a sms must be send
-        if ($c_service->{send_sms} == 0) {
-            $self->log->notice("send_sms disabled by service, no sms send");
-        } elsif ($self->company->{sms_enabled} == 0) {
-            $self->log->notice("send_sms disabled by company, no sms send");
-        } elsif (!$flapping && $n_status eq "OK" && $c_service->{sms_ok} == 0) {
-            $self->log->notice("sms_ok disabled, no sms send");
-        } elsif (!$flapping && $n_status eq "OK" && $a_status eq "WARNING" && $c_service->{sms_warnings} == 0) {
-            $self->log->notice(
-                "highest_attempt_status $a_status,",
-                "sms_warnings disabled,",
-                "no sms send",
-            );
-        } elsif (!$flapping && $n_status eq "WARNING" && $c_service->{sms_warnings} == 0) {
-            $self->log->notice("sms_warnings disabled, no sms send");
-        } elsif ($next_sms_hard > $self->etime) {
-            $self->log->notice("no sms send - next sms $next_sms_hard (hard interval)");
-        } elsif ($flapping && $next_sms_flap > $self->etime) {
-            $self->log->notice("no sms send - service is flapping - next sms $next_sms_flap");
-        } elsif ($n_status ne "OK" && $next_sms_soft > $self->etime && $self->statbyprio->{$n_status} <= $self->statbyprio->{$c_status}) {
-            # Do not send a SMS if next_time is lower then etime
-            # and if the new status is lower then the current status.
-            # That means: if etime is lower -> sent a SMS
-            # And: if the new status is higher -> sent a SMS (maybe the status switched from WARNING to CRITICAL)
-            $self->log->notice("no sms send - next sms $next_sms_soft (soft interval)");
-        } elsif (!$self->check_if_max_sms_reached) {
-            $save_sms = 1;
+        next CHECK
+            if $self->check_srvchk_passive_check
+            || $self->check_srvchk_next_timeout
+            || $self->check_if_host_or_service_not_active
+            || $self->check_if_downtime_is_active
+            || $self->check_if_srvchk_remote_error;
+
+        $self->prepare_service_data;
+        $self->check_service_message_tags($self->n_service->{message});
+        $self->check_service_notification_status;
+        $self->attempt_max_reached->set($service_id => 0);
+        $self->check_nok_service_status;
+        $self->check_volatile_service_status;
+        $self->reset_service_parameter;
+        $self->check_service_attempt_counter;
+        $self->check_if_service_is_flapping;
+        $self->check_highest_attempt_status;
+        $self->check_notifications;
+        $self->set_service_next_check;
+        $self->store_stats;
+        $self->save_service_event;
+        $self->update_service_status($self->service_status);
+    }
+}
+
+sub check_notifications {
+    my $self = shift;
+
+    if ($self->pre_check_notification_status) {
+        return;
+    }
+
+    if ($self->check_notification_interval) {
+        return;
+    }
+
+    $self->check_if_sms_are_enabled;
+    $self->save_notifications_by_contact;
+}
+
+sub check_if_sms_are_enabled {
+    my $self = shift;
+
+    $self->sms_enabled(1);
+
+    if ($self->company->{sms_enabled} == 0) {
+        $self->log->notice("send_sms disabled by company, no sms send");
+        $self->sms_enabled(0);
+    } elsif ($self->check_if_max_sms_reached) {
+        $self->log->notice("max sms reached, no sms send");
+        $self->sms_enabled(0);
+    }
+}
+
+sub pre_check_notification_status {
+    my $self = shift;
+
+    # Do nothing if the status doesn't changed
+    if ($self->n_status eq "OK" && $self->c_status eq "OK") {
+        return 1;
+    }
+
+    # If the new status is OK and highest_attempt_status is
+    # OK too then it's not necessary to send a notification.
+    if ($self->n_status eq "OK" && $self->c_service->{highest_attempt_status} eq "OK") {
+        return 1;
+    }
+
+    # No notification if notifications are disabled
+    if ($self->host->{notification} == 0) {
+        $self->log->notice("host notifications disabled");
+        return 1;
+    }
+
+    if ($self->c_service->{notification} == 0) {
+        $self->log->notice("service notifications disabled");
+        return 1;
+    }
+
+    # No notification if the status isn't changed and the status is acknowledged
+    if ($self->n_status eq $self->c_status && $self->c_service->{acknowledged} == 1) {
+        $self->log->notice("service status is acknowledged");
+        return 1;
+    }
+
+    if ($self->service_status->{flapping}) {
+        $self->log->notice("service if flapping between states");
+    } elsif ($self->whoami ne "srvchk" && $self->c_service->{attempt_counter} < $self->c_service->{attempt_max}) {
+        $self->log->notice("attempt max not reached");
+        return 1;
+    }
+
+    return 0;
+}
+
+sub check_notification_interval {
+    my $self = shift;
+
+    # last_notification_1 is the timestamps when the last notification was send.
+    # last_notification_2 is the same but will be set back to 0 if the status of the service is ok.
+    my $notification_interval = $self->c_service->{notification_interval} ? $self->c_service->{notification_interval} : $self->host->{notification_interval};
+    my $next_notification1 = $self->c_service->{last_notification_1} + $notification_interval;
+    my $next_notification2 = $self->c_service->{last_notification_2} + $notification_interval;
+
+    $self->log->info("check if a notification must be send");
+    $self->log->notice(
+        last_notification_1 => $self->c_service->{last_notification_1},
+        last_notification_2 => $self->c_service->{last_notification_2},
+        notification_interval => $notification_interval
+    );
+
+    if ($self->service_status->{flapping} && $next_notification1 > $self->etime) {
+        $self->log->notice("no notification send - service is flapping - next notification $next_notification1");
+        return 1;
+    }
+
+    # If the new status is OK and the old status is not OK then the notification interval is ignored.
+    if ($self->n_status ne "OK" && $next_notification2 > $self->etime) {
+        $self->log->notice("no notification send - next notification $next_notification2");
+        return 1;
+    }
+
+    if (
+        $self->n_status ne "OK"
+        && $next_notification2 > $self->etime
+        && $self->stat_by_prio->get($self->n_status) <= $self->stat_by_prio->get($self->c_status)
+    ) {
+        # Do not send a SMS if next_time is lower then etime
+        # and if the new status is lower then the current status.
+        # That means: if etime is lower -> sent a SMS
+        # And: if the new status is higher -> sent a SMS (maybe the status switched from WARNING to CRITICAL)
+        $self->log->notice("no notification send - next notification $next_notification2");
+        return 1;
+    }
+
+    $self->log->notice("possible to send a notification");
+    return 0;
+}
+
+sub set_service_next_check {
+    my $self = shift;
+
+    if ($self->c_service->{passive_check}) {
+        if ($self->c_service->{next_check}) {
+            $self->service_status->{next_check} = 0;
+        }
+        if ($self->c_service->{next_timeout}) {
+            $self->service_status->{next_timeout} = 0;
+        }
+        return;
+    }
+
+    my $interval = $self->c_service->{interval} || $self->host->{interval};
+    my $timeout = $self->c_service->{timeout} || $self->host->{timeout};
+
+    # If srvchk reports an critical status then all contacts
+    # are notified immediate. For this reason it's not necessary
+    # to the next timeout too early. The next timeout is forced
+    # to 300 seconds because the lowest escalation time of the
+    # contacts is 300 seconds. Next check remains untouched!
+    $self->service_status->{next_timeout} = $interval + $timeout > 600
+        ? $self->etime + 600
+        : $self->etime + $interval + $timeout;
+
+    $self->service_status->{next_check} = $self->etime + $interval;
+}
+
+sub save_notifications_by_contact {
+    my $self = shift;
+    my $send_sms = 1;
+
+    my $contacts = $self->db->get_service_contacts($self->host->{id}, $self->service_id);
+
+    if (!scalar @$contacts) {
+        $self->log->notice("no contacts found for service", $self->service_id);
+        return;
+    }
+
+    if ($self->check_if_service_has_a_active_dependency) {
+        return;
+    }
+
+    # If the service currently switched from OK to CRITICAL
+    # and attempt_max is set to 1, then status_nok_since contains
+    # the timestamp since the status is OK. For this reason it's
+    # necessary to set s_since to 0 if the last status of the
+    # service was OK or INFO.
+    my $status_duration = $self->c_status ne "OK" && $self->c_status ne "INFO"
+        ? $self->etime - $self->c_service->{status_nok_since}
+        : $self->etime;
+
+    foreach my $contact (@$contacts) {
+        $self->log->info("check contact $contact->{name} ($contact->{id})");
+
+        # Check if the contact has a valid timeperiod.
+        $self->log->info("check timeperiod for contact $contact->{name} ($contact->{id})");
+
+        if ($contact->{escalation_time} && $self->c_service->{status_nok_since} + $contact->{escalation_time} > $self->etime) {
+            $self->log->info("contact $contact->{name} ($contact->{id}) has a higher escalation level");
+            next;
         }
 
+        my $active_timeperiods = $self->check_contact_timeperiods($contact->{id}, $contact->{name});
+
+        if (!scalar keys %$active_timeperiods) {
+            $self->log->info("no active timeslices found for contact $contact->{name} ($contact->{id})");
+            next;
+        }
+
+        my $message_services = $self->db->get_contact_message_services($contact->{id});
+        my $service_status = $self->service_status->{status};
+
+        if (!@$message_services) {
+            $self->log->info("no message services configured for contact $contact->{name} ($contact->{id})");
+            next;
+        }
+
+        foreach my $message_service (@$message_services) {
+            if ($active_timeperiods->{$message_service->{message_service}} && $active_timeperiods->{$message_service->{message_service}} == 2) {
+                $self->log->info(
+                    "message service is excluded in timeperiods:",
+                    $message_service->{id},
+                    $message_service->{message_service},
+                    $message_service->{send_to},
+                    $message_service->{notification_level}
+                );
+                next;
+            }
+
+            if (!$active_timeperiods->{$message_service->{message_service}} && !$active_timeperiods->{all}) {
+                $self->log->info(
+                    "message service is not configured in timeperiods:",
+                    $message_service->{id},
+                    $message_service->{message_service},
+                    $message_service->{send_to},
+                    $message_service->{notification_level}
+                );
+                next;
+            }
+
+            if ($message_service->{notification_level} !~ /all|$service_status/i) {
+                $self->log->info(
+                    "notification level of message service does not match:",
+                    $message_service->{id},
+                    $message_service->{message_service},
+                    $message_service->{send_to},
+                    $message_service->{notification_level}
+                );
+                next;
+            }
+
+            if ($message_service->{enabled} == 0) {
+                $self->log->info(
+                    "message service not enabled:",
+                    $message_service->{id},
+                    $message_service->{message_service},
+                    $message_service->{send_to},
+                    $message_service->{notification_level}
+                );
+                next;
+            }
+
+            $self->log->notice(
+                "save notification for",
+                "service id", $self->service_id,
+                "contact id", $contact->{id},
+                "contact name", $contact->{name}
+            );
+
+            $self->save_notification(
+                service_id => $self->service_id,
+                service_name => $self->c_service->{service_name},
+                status => $self->n_status,
+                message_service => $message_service->{message_service},
+                send_to => $message_service->{send_to},
+                message => $self->service_status->{message},
+                description => $self->c_service->{description},
+                comment => $self->c_service->{comment},
+                status_duration => $status_duration
+            );
+        }
+    }
+}
+
+sub check_if_service_has_a_active_dependency {
+    my $self = shift;
+
+    # service_has_active_dependency
+    #   0 = not checkec
+    #   1 = no
+    #   2 = yes
+
+    if ($self->service_has_active_dependency == 1) {
+        return 0;
+    }
+
+    if ($self->service_has_active_dependency == 2) {
+        return 1;
+    }
+
+    # At first it will be checked if the service or host
+    # has a dependency and if the dependency is in any
+    # status that no notification must be send.
+    if ($self->n_status ne "OK" && $self->dependency_is_in_true_status($self->host->{id}, $self->service_id, $self->n_status)) {
         $self->log->notice(
-            "last_mail=$c_service->{last_mail}",
-            "last_mail_time=$c_service->{last_mail_time}",
-            "mail_soft_interval=$c_service->{mail_soft_interval}",
-            "mail_hard_interval=$c_service->{mail_hard_interval}"
+            "host id", $self->host->{id}, "or service id", $self->service_id, "has a",
+            "dependency status that is true, skipping notification",
+            "for status", $self->n_status
+        );
+        $self->service_status->{status_dependency_matched} = $self->etime;
+        $self->service_has_active_dependency(2);
+        return 1;
+    }
+
+    if ($self->n_status eq "OK" && $self->c_service->{status_dependency_matched} > 0) {
+        # Do not send a notification if the new status is OK and
+        # if the last notifications were not send because of a
+        # service dependency.
+        $self->log->notice(
+            "host id", $self->host->{id}, "or service id", $self->service_id, "has a",
+            "dependency status that was true, skipping notification",
+            "for status", $self->n_status
+        );
+        $self->service_has_active_dependency(2);
+        return 1;
+    }
+
+    if ($self->n_status ne "OK" && $self->c_service->{status_dependency_matched} + 60 > $self->etime) {
+        # Avoid a race condition. If the service dependencies doesn't
+        # match any more but the service is still in a higher status
+        # than OK then a notification should send first if the last
+        # dependency check is 60 seconds ago.
+        $self->log->notice(
+            "host id", $self->host->{id}, "or service id", $self->service_id, "has a",
+            "dependency status that was true, skipping notification",
+            "for status $self->n_status to avoid a race condition",
+        );
+        $self->service_has_active_dependency(2);
+        return 1;
+    }
+
+    if ($self->c_service->{status_dependency_matched} > 0) {
+        $self->service_status->{status_dependency_matched} = 0;
+    }
+
+    $self->service_has_active_dependency(1);
+    return 0;
+}
+
+sub check_if_service_is_flapping {
+    my $self = shift;
+    my $flapping;
+
+    # At first check if the service flaps between states.
+    if ($self->c_service->{fd_enabled} == 1) {
+        my $flap_count = $self->get_service_flaps_by_time(
+            $self->host->{id},
+            $self->service_id,
+            $self->etime - $self->c_service->{fd_time_range},
+            $self->etime
         );
 
-        # Now check if a mail must be send
-        if (!$flapping && $n_status eq "OK" && $c_service->{mail_ok} == 0) {
-            $self->log->notice("mail_ok disabled, no mail send");
-        } elsif (!$flapping && $n_status eq "OK" && $a_status eq "WARNING" && $c_service->{mail_warnings} == 0) {
-            $self->log->notice(
-                "highest_attempt_status $a_status,",
-                "mail_warnings disabled,",
-                "no mail send",
-            );
-        } elsif (!$flapping && $n_status eq "WARNING" && $c_service->{mail_warnings} == 0) {
-            $self->log->notice("mail_warnings disabled, no mail send");
-        } elsif ($next_mail_hard > $self->etime) {
-            $self->log->notice("no mail send - next mail $next_mail_hard (hard interval)");
-        } elsif ($flapping && $next_mail_flap > $self->etime) {
-            $self->log->notice("no mail send - service is flapping - next mail $next_mail_flap");
-        } elsif ($n_status ne "OK" && $next_mail_soft > $self->etime && $self->statbyprio->{$n_status} <= $self->statbyprio->{$c_status}) {
-            $self->log->notice("no mail send - next mail $next_mail_soft (soft interval)");
-        } else {
-            $self->log->notice("mail will be send");
-            $save_mail = 1;
+        $self->log->notice("flap count", $self->service_id, $flap_count);
+
+        if ($flap_count >= $self->c_service->{fd_flap_count}) {
+            $self->log->notice("service", $self->service_id, "is flapping - count $flap_count");
+            $self->service_status->{message} = sprintf("[SERVICE IS FLAPPING BETWEEN STATES] %s", $self->service_status->{message});
+            $flapping = 1;
+        }
+    }
+
+    if ($flapping) {
+        $self->service_status->{flapping} = 1;
+        $self->event_tags->push("flapping");
+    } elsif ($self->c_service->{flapping}) {
+        $self->service_status->{flapping} = 0;
+    }
+}
+
+sub check_service_attempt_counter {
+    my $self = shift;
+
+    # Check if the status is WARNING, CRITICAL or UNKNOWN
+    if ($self->n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
+        if ($self->c_service->{attempt_counter} == $self->c_service->{attempt_max}) {
+            $self->attempt_max_reached->set($self->service_id => 1);
+        } elsif ($self->c_service->{attempt_counter} > $self->c_service->{attempt_max}) {
+            $self->service_status->{attempt_counter} = $self->c_service->{attempt_max};
+            $self->c_service->{attempt_counter} = $self->c_service->{attempt_max};
+            $self->attempt_max_reached->set($self->service_id => 1);
+        } elsif ($self->c_service->{attempt_counter} < $self->c_service->{attempt_max} && $self->c_status ne "OK") {
+            $self->service_status->{attempt_counter} = 1 + $self->c_service->{attempt_counter};
+            $self->c_service->{attempt_counter} = 1 + $self->c_service->{attempt_counter};
         }
 
-        if ($save_sms || $save_mail) {
-            my $contact = $self->db->get_service_contacts($host->{id}, $service_id);
-
-            if (scalar @$contact) {
-                # At first it will be checked if the service or host
-                # has a dependency and if the dependency is in any
-                # status that no notification must be send.
-                if ($n_status ne "OK" && $self->dependency_is_in_true_status($host->{id}, $service_id, $n_status)) {
-                    $self->log->notice(
-                        "host id $host->{id} or service id $service_id has a",
-                        "dependency status that is true, skipping notification",
-                        "for status $n_status",
-                    );
-                    $self->db->save_service_status(
-                        $c_service->{id},
-                        { status_dependency_matched => $self->etime },
-                    );
-                    next CHECK;
-                } elsif ($n_status eq "OK" && $c_service->{status_dependency_matched} > 0) {
-                    # Do not send a notification if the new status is OK and
-                    # if the last notifications were not send because of a
-                    # service dependency.
-                    $self->log->notice(
-                        "host id $host->{id} or service id $service_id has a",
-                        "dependency status that was true, skipping notification",
-                        "for status $n_status",
-                    );
-                    next CHECK;
-                } elsif ($n_status ne "OK" && $c_service->{status_dependency_matched} + 60 > $self->etime) {
-                    # Avoid a race condition. If the service dependencies doesn't
-                    # match any more but the service is still in a higher status
-                    # than OK then a notification should send first if the last
-                    # dependency check is 60 seconds ago.
-                    $self->log->notice(
-                        "host id $host->{id} or service id $service_id has a",
-                        "dependency status that was true, skipping notification",
-                        "for status $n_status to avoid a race condition",
-                    );
-                    next CHECK;
-                } elsif ($c_service->{status_dependency_matched} > 0) {
-                    $self->db->save_service_status(
-                        $c_service->{id},
-                        { status_dependency_matched => 0 },
-                    );
+        if ($self->n_status eq "WARNING") {
+            if ($self->c_service->{attempt_counter} == $self->c_service->{attempt_max}) {
+                if ($self->c_service->{attempt_warn2crit} == 1) {
+                    $self->log->notice("attempt_max exceeded, status critical");
+                    $self->n_service->{status} = $self->n_status = "CRITICAL";
                 }
-
-                # If the service currently switched from OK to CRITICAL then
-                # and attempt_max is set to 1, then status_nok_since contains
-                # the timestamp since the status is OK. For this reason it's
-                # necessary to set s_since to 0 if the last status of the
-                # service was OK or INFO.
-                my $s_since = 0;
-                if ($c_status ne "OK" && $c_status ne "INFO") {
-                    $s_since = $self->etime - $c_service->{status_nok_since};
-                }
-
-                my $s_h_int = $c_service->{sms_hard_interval}  || 0;
-                my $s_s_int = $c_service->{sms_soft_interval}  || 0;
-                my $m_h_int = $c_service->{mail_hard_interval} || 0;
-                my $m_s_int = $c_service->{mail_soft_interval} || 0;
-
-                CONTACT:
-                foreach my $c (@$contact) {
-                    # Start to check contact
-                    $self->log->info("check contact $c->{name} ($c->{id})");
-
-                    my $e_level = $c->{escalation_level} || 0;
-                    my $do_send = { sms => 0, mail => 0 };
-
-                    # Pre-check if notifications are completly disabled
-                    if ($c->{sms_notifications_enabled} == 0 && $c->{mail_notifications_enabled} == 0) {
-                        # notifications are completly disabled for this contact
-                        next CONTACT; # skip
-                    }
-
-                    # Pre-check if the contact has any contact data set
-                    if (!$c->{sms_to} && !$c->{mail_to}) {
-                        # there are no contact data set
-                        next CONTACT; # skip
-                    }
-
-                    # Check if the contact has a valid timeperiod.
-                    $self->log->info("check timeperiod for contact $c->{name} ($c->{id})");
-                    $do_send = $self->is_in_notification_period($c->{id}, $c->{name});
-
-                    # Check the escalation level of the contact. If the escalation level
-                    # not NULL then the contact wants to be informed every time the soft
-                    # or hard interval timed out.
-                    if ($e_level) {
-                        $self->log->info(
-                            "check sms escalation level for contact '$c->{name}' ($c->{id}):",
-                            "($s_h_int && $s_since / $s_h_int < $c->{escalation_level})",
-                            "|| ($s_s_int && $s_since / $s_s_int < $e_level})",
-                        );
-
-                        if (($s_h_int && $s_since / $s_h_int < $e_level) || ($s_s_int && $s_since / $s_s_int < $e_level)) {
-                            $self->log->notice("sms escalation level does not match for contact $c->{name} ($c->{id})");
-                            $do_send->{sms} = 0;
-                        } else {
-                            $self->log->notice("sms escalation level matched for contact $c->{name} ($c->{id})");
-                        }
-
-                        $self->log->info(
-                            "check mail escalation level for contact '$c->{name}' ($c->{id}):",
-                            "($m_h_int && $s_since / $m_h_int < $c->{escalation_level})",
-                            "|| ($m_s_int && $s_since / $m_s_int < $e_level})",
-                        );
-
-                        if (($m_h_int && $s_since / $m_h_int < $e_level) || ($m_s_int && $s_since / $m_s_int < $e_level)) {
-                            $self->log->notice("mail escalation level does not match for contact $c->{name} ($c->{id})");
-                            $do_send->{mail} = 0;
-                        } else {
-                            $self->log->notice("mail escalation level matched for contact $c->{name} ($c->{id})");
-                        }
-                    }
-
-                    # Some shortcuts because the if-condition are so fucking long :-)
-                    my $sms_note_enabled  = $c->{sms_notifications_enabled} == 1;
-                    my $sms_note_level    = $c->{sms_notification_level} =~ /all|$n_status/i;
-                    my $mail_note_enabled = $c->{mail_notifications_enabled} == 1;
-                    my $mail_note_level   = $c->{mail_notification_level} =~ /all|$n_status/i;
-
-                    if ($save_sms && $c->{sms_to} && $sms_note_enabled && $sms_note_level && $do_send->{sms}) {
-                        $self->log->notice(
-                            "save sms for service id $service_id for contact",
-                            "'$c->{name}' id $c->{id} level $e_level",
-                        );
-
-                        $self->save_sms(
-                            service_id => $service_id,
-                            service => $c_service->{service_name},
-                            status => $n_status,
-                            message => $status{message},
-                            sms_to => $c->{sms_to}
-                        );
-                    }
-
-                    if ($save_mail && $c->{mail_to} && $mail_note_enabled && $mail_note_level && $do_send->{mail}) {
-                        $self->log->notice(
-                            "save mail for service id $service_id for contact",
-                            "'$c->{name}' id $c->{id} level $e_level",
-                        );
-
-                        my $escalation_level = 0;
-
-                        if ($s_since) {
-                            if ($m_h_int > $m_s_int) {
-                                $escalation_level = $m_h_int == 0 ? 0 : int($s_since / $m_h_int);
-                            } else {
-                                $escalation_level = $m_s_int == 0 ? 0 : int($s_since / $m_s_int);
-                            }
-                        }
-
-                        $self->save_mail(
-                            service_id => $service_id,
-                            service => $c_service->{service_name},
-                            status => $n_status,
-                            message => $status{message},
-                            mail_to => $c->{mail_to},
-                            description => $c_service->{description},
-                            comment => $c_service->{comment},
-                            escalation => $escalation_level
-                        );
-                    }
-                }
-            } else {
-                $self->log->notice("no contacts found for service $service_id");
             }
         }
     }
+}
+
+sub reset_service_parameter {
+    my $self = shift;
+
+    # Check if the status is OK and reset some parameter
+    if ($self->n_status eq "OK") {
+        if ($self->c_service->{attempt_counter} > 1) {
+            $self->service_status->{attempt_counter} = 1;
+        }
+
+        if ($self->c_service->{last_notification_2} > 0) {
+            $self->service_status->{last_notification_2} = 0;
+        }
+
+        if ($self->c_service->{acknowledged} == 1) {
+            $self->service_status->{acknowledged} = 0;
+            $self->service_status->{acknowledged_comment} = "auto cleared";
+        }
+
+        if ($self->c_service->{status_dependency_matched} > 0) {
+            $self->service_status->{status_dependency_matched} = 0;
+        }
+    }
+}
+
+sub check_highest_attempt_status {
+    my $self = shift;
+
+    # The option highest_attempt_status is used to store the highest status
+    # for the last notification that was send. That means if the status is
+    # not OK and attempt_max is reached then the status will be saved to
+    # "highest_attempt_status". Then, if the status fall back to OK again,
+    # and a high status is saved to "highest_attempt_status", it's necessary
+    # to send a OK notification because the admin wants to know if all is ok.
+    if (
+        $self->n_status eq "OK"
+        || (
+            $self->n_status ne "INFO"
+            && $self->c_service->{attempt_counter} >= $self->c_service->{attempt_max}
+            && $self->stat_by_prio->get($self->c_service->{highest_attempt_status}) < $self->stat_by_prio->get($self->n_status)
+           )
+    ) {
+        $self->service_status->{highest_attempt_status} = $self->n_status;
+    }
+}
+
+sub check_service_message_tags {
+    my $self = shift;
+    my @tags;
+
+    # set tag agent dead
+    if ($self->whoami eq "srvchk") {
+        $self->event_tags->push("agent dead");
+    }
+
+    # set tag timeout
+    if ($self->n_service->{message} =~ /timeout|timed out/) {
+        $self->event_tags->push("timeout");
+    }
+}
+
+sub prepare_service_data {
+    my $self = shift;
+
+    # rename advanced_status to result
+    if ($self->n_service->{advanced_status}) {
+        $self->n_service->{result} = delete $self->n_service->{advanced_status};
+    }
+
+    foreach my $key (qw/result debug/) {
+        if ($self->n_service->{$key}) {
+            $self->service_status->{$key} = ref $self->n_service->{$key}
+                ? $self->json->encode($self->n_service->{$key})
+                : $self->n_service->{$key};
+        } else {
+            $self->service_status->{$key} = "";
+        }
+    }
+}
+
+sub check_nok_service_status {
+    my $self = shift;
+
+    # status_nok_since:
+    #     ok = OK | INFO
+    #    nok = WARNING | CRITICAL | UNKNOWN
+    # status_since
+    #    The time in epoch since the service is in this status
+    if ($self->c_status ne $self->n_status) {
+        my $cs_is_ok = $self->c_status =~ /^(OK|INFO)\z/;
+        my $ns_is_ok = $self->n_status =~ /^(OK|INFO)\z/;
+
+        if (($cs_is_ok && !$ns_is_ok) || (!$cs_is_ok && $ns_is_ok)) {
+            $self->service_status->{status_nok_since} = $self->etime;
+        }
+
+        $self->service_status->{status_since} = $self->etime;
+    }
+}
+
+sub check_volatile_service_status {
+    my $self = shift;
+
+    # Just some short variables
+    my $is_volatile = $self->c_service->{is_volatile}; # is this a volatile status?
+    my $volatile_status = $self->c_service->{volatile_status}; # has become the service volatile?
+    my $volatile_retain = $self->c_service->{volatile_retain};
+    my $volatile_since = $self->c_service->{volatile_since};
+    my $volatile_time = $volatile_retain + $volatile_since;
+
+    # If the status is not OK and if the volatile_status flag is not set
+    if ($self->n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
+        if ($is_volatile && !$volatile_status) {
+            $self->log->info("set service in volatile status since", $self->etime);
+            $self->service_status->{volatile_status} = 1;
+            $self->service_status->{volatile_since} = $self->etime;
+        }
+    }
+
+    # If the volatile_status flag is set and the retain time is not expired
+    if ($is_volatile && $volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
+        $self->log->info("unable to set the status to OK because service is in volatile status");
+        $self->event_tags->push("volatile");
+        $self->service_status->{volatile_status} = 1;
+    }
+
+    # Manipulate the volatile status because the status must be hold
+    if ($self->service_status->{volatile_status}) {
+        if ($self->stat_by_prio->get($self->n_status) < $self->stat_by_prio->get($self->c_status)) {
+            $self->log->info("overwrite service status from", $self->n_status, "to volatile status", $self->c_status);
+            $self->service_status->{status} = $self->n_service->{status} = $self->n_status = $self->c_status;
+        }
+        $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
+    }
+
+    if ($self->n_status eq "OK") {
+        if ($volatile_status) {
+            $self->service_status->{volatile_status} = 0;
+        }
+
+        if ($volatile_since) {
+            $self->service_status->{volatile_since} = 0;
+        }
+    }
+}
+
+sub check_last_event {
+    my $self = shift;
+    my $month_now = $self->year_month_stamp;
+    my $month_last_event = $self->year_month_stamp($self->c_service->{last_event});
+    $self->force_timed_event($month_now ne $month_last_event);
 }
 
 sub check_if_max_sms_reached {
     my $self = shift;
     my $host = $self->host;
     my $company = $self->company;
+
+    if (defined $self->max_sms_reached) {
+        return $self->max_sms_reached;
+    }
+
+    $self->max_sms_reached(0);
 
     if (!defined $host->{sms_count}) {
         my $host_sms_count = $self->db->get_sms_count(host => $host->{id});
@@ -1384,16 +1413,14 @@ sub check_if_max_sms_reached {
 
     if ($host->{max_sms} && $host->{sms_count} >= $host->{max_sms}) {
         $self->log->notice("reached host max_sms $host->{sms_count}/$host->{max_sms}");
-        return 1;
-    }
-
-    if ($company->{max_sms} && $company->{sms_count} >= $company->{max_sms}) {
+        $self->max_sms_reached(1);
+    } elsif ($company->{max_sms} && $company->{sms_count} >= $company->{max_sms}) {
         $self->log->notice("reached company max_sms $company->{sms_count}/$company->{max_sms}");
-        return 1;
+        $self->max_sms_reached(1);
     }
 
-    $self->log->notice("sms will be send");
-    return undef;
+    $self->log->notice("possible to send sms");
+    return $self->max_sms_reached;
 }
 
 sub check_if_sms_contingent_is_low {
@@ -1416,20 +1443,35 @@ sub check_if_sms_contingent_is_low {
     return 0;
 }
 
-sub check_service_states {
+sub check_service_notification_status {
     my $self = shift;
 
     if ($self->c_service->{acknowledged} == 1) {
-        my $c = $self->c_service->{acknowledged_comment} || "n/a";
-        $self->n_service->{message} = join(" ", "[ACKNOWLEDGED: $c]", $self->n_service->{message});
+        $self->n_service->{message} = sprintf(
+            "[ACKNOWLEDGED: %s] %s",
+            $self->c_service->{acknowledged_comment} || "n/a",
+            $self->n_service->{message}
+        );
     }
 
     if ($self->host->{notification} == 0 || $self->c_service->{notification} == 0) {
-        my $c = $self->host->{notification} == 0
+        my $comment = $self->host->{notification} == 0
             ? $self->host->{notification_comment}
             : $self->c_service->{notification_comment};
-        $c ||= "n/a";
-        $self->n_service->{message} = join(" ", "[SILENCED: $c]", $self->n_service->{message});
+        $self->n_service->{message} = sprintf(
+            "[SILENCED: %s] %s",
+            $comment || "n/a",
+            $self->n_service->{message}
+        );
+    }
+
+    if ($self->maintenance && $self->n_service->{status} ne "OK") {
+        $self->n_service->{status} = "INFO";
+        $self->n_service->{message} = sprintf(
+            "[MAINTENANCE (true status: %s)] %s",
+            $self->n_service->{status},
+            $self->n_service->{message}
+        );
     }
 }
 
@@ -1451,38 +1493,38 @@ sub check_if_host_or_service_not_active {
         $comment = $self->company->{active_comment} || "n/a";
     }
 
-    my %status = (
+    $self->service_status({
         status => "INFO",
         message => join(" ", "[INACTIVE: $comment]", $self->n_service->{message}),
-        attempt_counter => 1,
-        next_check_timeout => $self->etime + $self->service_interval + $self->service_timeout
-    );
+        attempt_counter => 1
+    });
 
     if ($self->n_service->{status} eq "OK" && $self->c_service->{status_dependency_matched} > 0) {
-        $status{status_dependency_matched} = 0;
+        $self->service_status->{status_dependency_matched} = 0;
     }
 
     # Store the new status to the events table.
-    if ($self->c_service->{status} ne "INFO" || $self->force_timed_event_entry) {
+    if ($self->c_service->{status} ne "INFO" || $self->force_timed_event) {
         $self->log->notice("EVENT STATUS OK SERVICE", $self->service_id, "MESSAGE", $self->n_service->{message});
-        $status{last_event} = $self->etime;
+        $self->service_status->{last_event} = $self->etime;
 
         $self->save_event(
             status => "INFO",
-            message => $status{message},
+            message => $self->service_status->{message},
             tags => "inactive"
         );
 
         if ($self->c_service->{status} ne "INFO" && $self->c_service->{status} ne "OK") {
-            $status{status_nok_since} = $self->etime;
+            $self->service_status->{status_nok_since} = $self->etime;
         }
 
         if ($self->c_service->{status} ne "INFO") {
-            $status{status_since} = $self->etime;
+            $self->service_status->{status_since} = $self->etime;
         }
     }
 
-    $self->save_service_status(\%status);
+    $self->set_service_next_check;
+    $self->update_service_status($self->service_status);
     return 1;
 }
 
@@ -1490,6 +1532,7 @@ sub check_if_downtime_is_active {
     my $self = shift;
 
     if (!$self->host_downtime && !$self->service_downtime->{$self->service_id}) {
+        $self->service_status->{scheduled} = 0;
         return 0;
     }
 
@@ -1508,40 +1551,70 @@ sub check_if_downtime_is_active {
         }
     }
 
-    my %status = (
+    $self->service_status({
         status => "INFO",
         message => join(" ", $message, $self->n_service->{message}),
         attempt_counter => 1,
-        scheduled => 1,
-        next_check_timeout => $self->etime + $self->service_interval + $self->service_timeout
-    );
+        scheduled => 1
+    });
 
     if ($self->n_service->{status} eq "OK" && $self->c_service->{status_dependency_matched} > 0) {
-        $status{status_dependency_matched} = 0;
+        $self->service_status->{status_dependency_matched} = 0;
     }
 
     # Store the new status to the event table.
-    if ($self->c_service->{status} ne "INFO" || $self->force_timed_event_entry) {
+    if ($self->c_service->{status} ne "INFO" || $self->force_timed_event) {
         $self->log->notice("EVENT STATUS INFO SERVICE", $self->service_id, "MESSAGE", $self->n_service->{message});
-        $status{last_event} = $self->etime;
+        $self->service_status->{last_event} = $self->etime;
 
         $self->save_event(
             status => "INFO",
-            message => $status{message},
+            message => $self->service_status->{message},
             tags => "maintenance"
         );
 
         if ($self->c_service->{status} ne "INFO" && $self->c_service->{status} ne "OK") {
-            $status{status_nok_since} = $self->etime;
+            $self->service_status->{status_nok_since} = $self->etime;
         }
 
         if ($self->c_service->{status} ne "INFO") {
-            $status{status_since} = $self->etime;
+            $self->service_status->{status_since} = $self->etime;
         }
     }
 
-    $self->save_service_status(\%status);
+    $self->set_service_next_check;
+    $self->update_service_status($self->service_status);
     return 1;
+}
+
+sub check_srvchk_next_timeout {
+    my $self = shift;
+    my $interval = $self->c_service->{interval} || $self->host->{interval};
+    my $timeout = $self->c_service->{timeout} || $self->host->{timeout};
+    my $last_check = $self->c_service->{last_check};
+
+    if ($self->whoami eq "srvchk" && $last_check + $interval + $timeout > $self->etime) {
+        my $next_timeout = $last_check + $interval + $timeout - $self->etime > 600
+            ? $self->etime + 600
+            : $last_check + $interval + $timeout;
+        $self->log->notice("refresh next_timeout to $next_timeout for service id", $self->service_id);
+        $self->update_service_status(next_timeout => $next_timeout);
+        return 1;
+    }
+
+    return 0;
+}
+
+sub check_srvchk_passive_check {
+    my $self = shift;
+
+    if ($self->whoami eq "srvchk" && $self->c_service->{passive_check}) {
+        $self->log->notice("reset next_check and next_timeout of passive check");
+        $self->update_service_status(next_check => 0, next_timeout => 0);
+        return 1;
+    }
+
+    return 0;
 }
 
 sub check_if_srvchk_remote_error {
@@ -1556,10 +1629,11 @@ sub check_if_srvchk_remote_error {
     $self->log->notice("service", $self->service_id, "timed out, redirect notification");
     $self->log->notice("redirect notification for service", $self->service_id, "to $redirect_config->{mail_to}");
 
-    $self->save_mail(
+    $self->save_notification(
         service_id => $self->service_id,
         service => $self->c_service->{service_name},
         status => $self->n_service->{status},
+        message_service => "mail",
         message => $self->n_service->{message},
         mail_to => $redirect_config->{mail_to},
         description => $self->c_service->{description},
@@ -1568,52 +1642,82 @@ sub check_if_srvchk_remote_error {
         redirect => 1
     );
 
-    my %status = (
+    $self->service_status({
         status => "WARNING",
         message => join(" ", "[INTERNAL WARNING - remote agent dead]", $self->n_service->{message}),
-        attempt_counter => 1,
-        next_check_timeout => $self->etime + $self->service_interval + $self->service_timeout
-    );
+        attempt_counter => 1
+    });
 
-    if ($self->c_service->{status} ne "WARNING" || $self->force_timed_event_entry) {
+    if ($self->c_service->{status} ne "WARNING" || $self->force_timed_event) {
         $self->log->notice("EVENT STATUS INFO SERVICE", $self->service_id, "MESSAGE", $self->n_service->{message});
-        $status{last_event} = $self->etime;
+        $self->service_status->{last_event} = $self->etime;
 
         $self->save_event(
             status => "WARNING",
-            message => $status{message},
+            message => $self->service_status->{message},
             tags => "remote-agent-dead"
         );
 
         if ($self->c_service->{status} ne "WARNING") {
-            $status{status_nok_since} = $self->etime;
+            $self->service_status->{status_nok_since} = $self->etime;
         }
 
         if ($self->c_service->{status} ne "INFO") {
-            $status{status_since} = $self->etime;
+            $self->service_status->{status_since} = $self->etime;
         }
     }
 
-    $self->save_service_status(\%status);
+    $self->set_service_next_check;
+    $self->update_service_status($self->service_status);
     return 1;
 }
 
-sub save_service_status {
+sub save_service_event {
+    my $self = shift;
+
+    if (
+        $self->n_status ne $self->c_status
+        || $self->force_timed_event
+        || ($self->n_status !~ /^(OK|INFO)\z/ && !$self->attempt_max_reached->get($self->service_id))
+    ) {
+        $self->log->notice(
+            "safe event",
+            status => $self->n_status,
+            service => $self->service_id,
+            message => $self->n_service->{message}
+        );
+
+        $self->service_status->{last_event} = $self->etime;
+
+        if ($self->check_if_service_has_a_active_dependency) {
+            $self->event_tags->push("dependent");
+        }
+
+        $self->log->dump(notice => {
+            message => $self->service_status->{message},
+            tags => $self->event_tags->join(","),
+            attempts => join("/", $self->c_service->{attempt_counter}, $self->c_service->{attempt_max})
+        });
+
+        $self->save_event(
+            message => $self->service_status->{message},
+            tags => $self->event_tags->join(","),
+            attempts => join("/", $self->c_service->{attempt_counter}, $self->c_service->{attempt_max})
+        );
+    }
+}
+
+sub update_service_status {
     my $self = shift;
     my $data = @_ > 1 ? {@_} : shift;
 
-    if ($self->{set_next_check}) {
-        $data->{next_check_timeout} //= $self->etime + $self->service_interval;
-    } else {
-        $data->{last_check} = $self->etime;
-    }
+    $self->log->notice(
+        "save service",
+        status => $data->{status},
+        message => $data->{message}
+    );
 
-    if (!$data->{status} || ($data->{status} ne "INFO" && $data->{status} ne $self->n_service->{status})) {
-        $data->{status} = $self->n_service->{status};
-    }
-
-    $data->{next_check_id} = 0;
-    $self->db->save_service_status($self->service_id, $data);
+    $self->db->update_service_status($self->service_id, $data);
 }
 
 sub save_event {
@@ -1806,73 +1910,116 @@ sub dependency_is_in_true_status {
     return 0;
 }
 
-sub is_in_notification_period {
+sub check_contact_timeperiods {
     my ($self, $contact_id, $contact_name) = @_;
-
-    my $timeslices = $self->db->get_timeslices_by_contact_id($contact_id);
-    my ($send_sms, $send_mail, $send_all, $exclude);
 
     $self->log->notice("check time periods for contact $contact_id $contact_name");
 
-    if ($timeslices) {
-        foreach my $timeslice (@$timeslices) {
-            my $ret = Bloonix::Timeperiod->check(
-                $timeslice->{timeslice}, 
-                $self->etime,
-                $timeslice->{timezone},
-            );
+    my $message_services = {};
+    my $exclude_message_services = {};
+    my $timeslices = $self->db->get_timeslices_by_contact_id($contact_id);
 
-            if ($ret) {
-                $self->log->notice(
-                    "time period $timeslice->{type} matched -",
-                    "$timeslice->{timeslice} -",
-                    $timeslice->{timezone},
-                );
+    # timeslices = [
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Monday - Sunday 00:00 - 23:59',
+    #       'timeperiod_id' => '1',
+    #       'id' => '1',
+    #       'exclude' => '0',
+    #       'message_service' => 'all'
+    #     },
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Monday - Friday 09:00 - 17:00',
+    #       'timeperiod_id' => '2',
+    #       'id' => '1374',
+    #       'exclude' => '0',
+    #       'message_service' => 'sms'
+    #     },
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Monday - Friday 09:00 - 17:00',
+    #       'timeperiod_id' => '2',
+    #       'id' => '2',
+    #       'exclude' => '0',
+    #       'message_service' => 'sms'
+    #     },
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Saturday - Sunday 00:00 - 23:59',
+    #       'timeperiod_id' => '3',
+    #       'id' => '5',
+    #       'exclude' => '0',
+    #       'message_service' => 'mail'
+    #     },
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Monday - Friday 00:00 - 08:59',
+    #       'timeperiod_id' => '3',
+    #       'id' => '4',
+    #       'exclude' => '0',
+    #       'message_service' => 'mail'
+    #     },
+    #     {
+    #       'timezone' => 'Europe/Berlin',
+    #       'timeslice' => 'Monday - Friday 17:01 - 23:59',
+    #       'timeperiod_id' => '3',
+    #       'id' => '3',
+    #       'exclude' => '0',
+    #       'message_service' => 'mail'
+    #     }
+    # ];
 
-                if ($timeslice->{type} eq "send_to_all") {
-                    $send_all = 1;
-                } elsif ($timeslice->{type} eq "send_only_sms") {
-                    $send_sms = 1;
-                } elsif ($timeslice->{type} eq "send_only_mail") {
-                    $send_mail = 1;
-                } elsif ($timeslice->{type} eq "exclude") {
-                    $exclude = 1;
-                    return { sms => 0, mail => 0 };
-                } else {
-                    $self->log->error("invalid time slice found:");
-                    $self->log->dump(error => $timeslice);
-                }
-            } else {
-                $self->log->notice(
-                    "time period $timeslice->{type} does not matched -",
-                    "$timeslice->{timeslice} -",
-                    $timeslice->{timezone},
-                );
-            }
-        }
-
-        if ($send_all) {
-            return { sms => 1, mail => 1 };
-        }
-
-        if ($send_sms && $send_mail) {
-            return { sms => 1, mail => 1 };
-        }
-
-        if ($send_sms) {
-            return { sms => 1, mail => 0 };
-        }
-
-        if ($send_mail) {
-            return { sms => 0, mail => 1 };
-        }
-
-        $self->log->notice("no time periods matched");
-    } else {
+    if (!@$timeslices) {
         $self->log->notice("no time periods configured for contact $contact_id $contact_name");
+        return $message_services;
     }
 
-    return { sms => 0, mail => 0 };
+    foreach my $timeslice (@$timeslices) {
+        my $matched = Bloonix::Timeperiod->check(
+            $timeslice->{timeslice}, 
+            $self->etime,
+            $timeslice->{timezone},
+        );
+
+        if (!$matched) {
+            $self->log->info(
+                "timeslice $timeslice->{id} does not matched:",
+                $timeslice->{message_service},
+                $timeslice->{timeslice},
+                $timeslice->{timezone},
+                "exclude", $timeslice->{exclude}
+            );
+            next;
+        }
+
+        $self->log->notice(
+            "timeslice $timeslice->{id} matched:",
+            $timeslice->{message_service},
+            $timeslice->{timeslice},
+            $timeslice->{timezone},
+            "exclude", $timeslice->{exclude}
+        );
+
+        if ($timeslice->{exclude}) {
+            $self->log->info(
+                "timeslice $timeslice->{id} excludes message service",
+                $timeslice->{message_service}
+            );
+
+            if ($timeslice->{message_service} eq "all") {
+                return {};
+            }
+
+            $exclude_message_services->{$timeslice->{message_service}} = 1;
+            # setting a message service to 2 means that the service will be excluded
+            $message_services->{$timeslice->{message_service}} = 2;
+        } elsif (!$exclude_message_services->{$timeslice->{message_service}}) {
+            $message_services->{$timeslice->{message_service}} = 1;
+        }
+    }
+
+    return $message_services;
 }
 
 sub update_host_status {
@@ -1883,7 +2030,7 @@ sub update_host_status {
     my $status = "OK";
 
     foreach my $s (@$states) {
-        if ($self->statbyprio->{$s->{status}} > $self->statbyprio->{$status}) {
+        if ($self->stat_by_prio->get($s->{status}) > $self->stat_by_prio->get($status)) {
             $status = $s->{status};
         }
     }
@@ -1909,148 +2056,136 @@ sub update_host_status {
 
 sub store_stats {
     my ($self, $data) = @_;
-    my ($plugin_def, $plugin_stat);
-    my $host_id = $self->host->{id};
-    my $services = $self->host_services;
+
+    if (!$self->n_service->{plugin_id}) {
+        return;
+    }
+
+    $self->log->info("store result");
+
+    if ($self->n_service->{result}) {
+        $self->save_results(
+            service_id => $self->service_id,
+            status => $self->n_service->{status},
+            message => $self->n_service->{message},
+            data => $self->n_service->{result},
+            attempts => join("/", $self->c_service->{attempt_counter}, $self->c_service->{attempt_max})
+        );
+    }
+
+    if (!defined $self->n_service->{stats}) {
+        $self->log->info("no statistics received for service id", $self->service_id);
+        return;
+    }
 
     $self->log->info("store statistics");
 
-    foreach my $service_id (keys %$data) {
-        # If a plugin name is not set then
-        # no statistics are expected.
-        next unless $services->{$service_id}->{plugin_id};
+    # Request the plugin data first if its really necessary.
+    if (!$self->plugin_def) {
+        $self->plugin_def($self->db->get_plugin);
+        $self->plugin_stat($self->db->get_plugin_stats);
+    }
 
-        # Request the plugin data first if its really necessary.
-        if (!defined $plugin_def) {
-            $plugin_def = $self->db->get_plugin;
-            $plugin_stat = $self->db->get_plugin_stats;
-        }
+    my $stats = $self->n_service->{stats};
+    my $plugin_id = $self->c_service->{plugin_id};
+    my $plugin_def = $self->plugin_def->{$plugin_id};
+    my $plugin_stat = $self->plugin_stat->{$plugin_id};
 
-        # n_service = new service data
-        # c_service = current service data
-        my $n_service = $data->{$service_id};
-        my $c_service = $services->{$service_id};
-        my $stats = $n_service->{stats};
-        my $plugin_id = $c_service->{plugin_id};
-        my $service_id = $c_service->{id};
-        my $p_def = $plugin_def->{$plugin_id};
-        my $p_stat = $plugin_stat->{$plugin_id};
+    if ($plugin_def->{datatype} eq "table") {
+        my $ok = 0;
 
-        #if ($n_service->{result} && ref $n_service->{result} && !$self->attempt_max_reached->{$service_id}) {
-            $self->save_results(
-                service_id => $service_id,
-                status => $n_service->{status},
-                message => $n_service->{message},
-                data => $n_service->{result},
-                attempts => "$c_service->{attempt_counter}/$c_service->{attempt_max}"
-            );
-        #}
-
-        if (!defined $stats) {
-            $self->log->info("no statistics received for service id $service_id");
-            next;
-        }
-
-        if ($p_def->{datatype} eq "table") {
-            my $ok = 0;
-
-            if (ref $stats eq "ARRAY") {
-                foreach my $row (@$stats) {
-                    if ($self->validate_stats($row, $p_stat, $c_service)) {
-                        $ok++;
-                    }
-                }
-
-                if ($ok > 0 && $ok == scalar @$stats) {
-                    $self->save_stats(
-                        service_id => $service_id,
-                        plugin_id => $plugin_id,
-                        data => $stats
-                    );
-                }
-            } else {
-                $self->log->info("invalid statistic format received for service id $service_id");
-                delete $n_service->{stats};
-            }
-
-            next;
-        }
-
-        if ($plugin_id == 59) {
-            foreach my $key (keys %$stats) {
-                if (
-                    $key !~ /^[^\s]+\z/
-                    || ref $stats->{$key}
-                    || !defined $stats->{$key}
-                    || $stats->{$key} !~ /^\d+(\.\d+){0,1}(s|us|ms|%|[YZEPTGMK]{0,1}B|c){0,1}\z/
-                ) {
-                    delete $stats->{$key}
+        if (ref $stats eq "ARRAY") {
+            foreach my $row (@$stats) {
+                if ($self->validate_stats($row, $plugin_stat, $self->c_service)) {
+                    $ok++;
                 }
             }
-            if (scalar keys %$stats) {
+
+            if ($ok > 0 && $ok == scalar @$stats) {
                 $self->save_stats(
-                    service_id => $service_id,
+                    service_id => $self->service_id,
                     plugin_id => $plugin_id,
                     data => $stats
                 );
             }
-            next;
+        } else {
+            $self->log->info("invalid statistic format received for service id", $self->service_id);
         }
 
-        # Invalid statistic format
-        if (ref $stats ne "HASH") {
-            $self->log->info("invalid statistic format received for service id $service_id");
-            delete $n_service->{stats};
-            next;
-        }
+        return;
+    }
 
-        # Check if the statistics are stored into a hash reference.
-        if (!scalar keys %$stats) {
-            $self->log->info("no statistics received for service id $service_id");
-            delete $n_service->{stats};
-            next;
-        }
-
-        # Does the plugin exists? We need some data to validate it...
-        if (!$p_def) {
-            $self->log->warning("unknown plugin_id '$plugin_id' configured for service id $service_id");
-            delete $n_service->{stats};
-            next;
-        }
-
-        my ($anykey) = keys %$stats;
-
-        if ($p_def->{subkey} || ref $stats->{$anykey} eq "HASH") {
-            my $subkeys = join(",", sort keys %$stats);
-
-            if (!$c_service->{subkeys} || $c_service->{subkeys} ne $subkeys) {
-                $self->db->save_service_status($service_id, { subkeys => $subkeys });
+    if ($plugin_id == 59) {
+        foreach my $key (keys %$stats) {
+            if (
+                $key !~ /^[^\s]+\z/
+                || ref $stats->{$key}
+                || !defined $stats->{$key}
+                || $stats->{$key} !~ /^\d+(\.\d+){0,1}(s|us|ms|%|[YZEPTGMK]{0,1}B|c){0,1}\z/
+            ) {
+                delete $stats->{$key}
             }
-
-            foreach my $subvalue (keys %$stats) {
-                if ($subvalue !~ m!^[a-zA-Z_0-9\-\.\:/]+\z!) {
-                    $self->log->error("invalid subkey '$subvalue' for plugin_id '$plugin_id'");
-                    last;
-                }
-                if ($self->validate_stats($stats->{$subvalue}, $p_stat, $c_service)) {
-                    $self->save_stats(
-                        subkey => $subvalue,
-                        service_id => $service_id,
-                        plugin_id => $plugin_id,
-                        data => $stats->{$subvalue}
-                    );
-                }
-            }
-        } elsif ($self->validate_stats($stats, $p_stat, $c_service)) {
-            if ($c_service->{subkeys}) {
-                $self->db->save_service_status($service_id, { subkeys => "" });
-            }
+        }
+        if (scalar keys %$stats) {
             $self->save_stats(
-                service_id => $service_id,
+                service_id => $self->service_id,
                 plugin_id => $plugin_id,
                 data => $stats
             );
         }
+        return;
+    }
+
+    # Invalid statistic format
+    if (ref $stats ne "HASH") {
+        $self->log->info("invalid statistic format received for service id", $self->service_id);
+        return;
+    }
+
+    # Check if the statistics are stored into a hash reference.
+    if (!scalar keys %$stats) {
+        $self->log->info("no statistics received for service id", $self->service_id);
+        return;
+    }
+
+    # Does the plugin exists? We need some data to validate it...
+    if (!$plugin_def) {
+        $self->log->warning("unknown plugin_id '$plugin_id' configured for service id", $self->service_id);
+        return;
+    }
+
+    my ($anykey) = keys %$stats;
+
+    if ($plugin_def->{subkey} || ref $stats->{$anykey} eq "HASH") {
+        my $subkeys = join(",", sort keys %$stats);
+
+        if (!$self->c_service->{subkeys} || $self->c_service->{subkeys} ne $subkeys) {
+            $self->service_status->{subkeys} = $subkeys;
+        }
+
+        foreach my $subvalue (keys %$stats) {
+            if ($subvalue !~ m!^[a-zA-Z_0-9\-\.\:/]+\z!) {
+                $self->log->error("invalid subkey '$subvalue' for plugin_id '$plugin_id'");
+                last;
+            }
+            if ($self->validate_stats($stats->{$subvalue}, $plugin_stat, $self->c_service)) {
+                $self->save_stats(
+                    subkey => $subvalue,
+                    service_id => $self->service_id,
+                    plugin_id => $plugin_id,
+                    data => $stats->{$subvalue}
+                );
+            }
+        }
+    } elsif ($self->validate_stats($stats, $plugin_stat, $self->c_service)) {
+        if ($self->c_service->{subkeys}) {
+            $self->service_status->{subkeys} = "";
+        }
+        $self->save_stats(
+            service_id => $self->service_id,
+            plugin_id => $plugin_id,
+            data => $stats
+        );
     }
 }
 
@@ -2139,32 +2274,58 @@ sub validate_stats {
     return 1;
 }
 
-sub send_sms {
-    my $self  = shift;
+sub save_notification {
+    my ($self, %msg) = @_;
+    my $notification = $self->{notifications};
+    my $message_service = delete $msg{message_service};
+    my $send_to = delete $msg{send_to};
 
-    if (!scalar keys %{$self->{sms}}) {
-        return 1;
+    if ($message_service eq "sms") {
+        $send_to =~ s/^\+/00/;
     }
+
+    if ($self->log->is_debug) {
+        $self->log->debug("saved notification:");
+        $self->log->dump(debug => \%msg);
+    }
+
+    push @{$notification->{$message_service}->{$send_to}}, \%msg;
+}
+
+sub send_notifications {
+    my $self = shift;
 
     if ($self->maintenance) {
-        $self->log->warning("server runs in maintenance mode, unable to send sms");
+        $self->log->warning("server runs in maintenance mode, unable to send any notifications");
         return 1;
     }
 
+    if ($self->{notifications}->{mail}) {
+        $self->send_mails;
+    }
+
+    if ($self->{notifications}->{sms}) {
+        $self->send_sms;
+    }
+}
+
+sub send_sms {
+    my $self  = shift;
     my $host = $self->host;
     my $company = $self->company;
-    my $mail = $self->config->{email};
+    my $mail = $self->config->{notification}->{mail};
+    my $sms_config = $self->config->{notifications}->{sms};
     my %service_id = ();
 
-    if (!$self->config->{smsgateway}->{command}) {
+    if (!$sms_config) {
         $self->log->notice("sms disabled");
         return 1;
     }
 
-    foreach my $sms_to (keys %{ $self->{sms} }) {
+    foreach my $sms_to (keys %{ $self->{notifications}->{sms} }) {
         my ($service_ids, $message) = $self->gen_sms_message($sms_to);
 
-        if ($self->send_sms_to_provider($sms_to, uri_escape($message))) {
+        if ($self->send_sms_to_provider($sms_to, URI::Escape::uri_escape($message))) {
             $self->log->notice("sms successfully send");
             $host->{sms_count}++;
             $company->{sms_count}++;
@@ -2177,8 +2338,6 @@ sub send_sms {
                 $message
             );
 
-            # Update "last_sms" first if send was successful,
-            # but only if the status is not OK
             foreach my $id (@$service_ids) {
                 if ($id->{status} ne "OK") {
                     $service_id{$id->{service_id}}++;
@@ -2195,30 +2354,29 @@ sub send_sms {
                     Data => $message,
                 )->send("sendmail", "$mail->{sendmail}");
             }
+
+            # Check here the sms_count again because if more than
+            # one contact is configured then the sms counter
+            # increases with each sms that is send.
+            last if $self->check_inner_if_max_sms_reached;
         }
     }
 
-    foreach my $id (keys %service_id) {
-        $self->log->notice("update last_sms to", $self->etime);
-        $self->db->save_service_status($id, { last_sms => $self->etime, last_sms_time => $self->etime });
-    }
+    # Update last_notification first if send was successful,
+    # but only if the status is not OK
+    $self->update_last_notification(keys %service_id);
 }
 
 sub gen_sms_message {
     my ($self, $sms_to) = @_;
     my $host = $self->host;
     my $message = "$host->{hostname} $host->{ipaddr}";
-    my $sms = $self->{sms}->{$sms_to};
+    my $sms = $self->{notifications}->{sms}->{$sms_to};
     my (@service_ids, $redirect);
-
-    # Check here the sms_count again because if more than
-    # one contact is configured then the sms counter
-    # increases with each sms that is send.
-    last if $self->check_inner_if_max_sms_reached;
 
     if (@$sms == 1) {
         $sms = shift @$sms;
-        $message .= " - $sms->{service} $sms->{status} - $sms->{message}";
+        $message .= " - $sms->{service_name} $sms->{status} - $sms->{message}";
         push @service_ids, $sms;
         $redirect = $sms->{redirect};
     } else {
@@ -2227,7 +2385,7 @@ sub gen_sms_message {
         foreach my $sms (@$sms) {
             $status{ $sms->{status} }++;
             push @service_ids, $sms;
-            push @service, $sms->{service};
+            push @service, $sms->{service_name};
 
             if ($sms->{redirect}) {
                 $redirect = $sms->{redirect};
@@ -2271,7 +2429,7 @@ sub send_sms_to_provider {
 
 sub execute_command_to_send_sms {
     my ($self, $type, $sms_to, $message) = @_;
-    my $param = $self->config->{smsgateway};
+    my $param = $self->config->{notifications}->{sms};
     my ($command, $response, $route, $output);
 
     if ($type eq "primary") {
@@ -2337,24 +2495,14 @@ sub check_inner_if_max_sms_reached {
 
 sub send_mails {
     my $self = shift;
-
-    if (!scalar keys %{$self->{mails}}) {
-        return 1;
-    }
-
-    if ($self->maintenance) {
-        $self->log->warning("server runs in maintenance mode, unable to send mail");
-        return 1;
-    }
-
     my $host = $self->host;
     my $company = $self->company;
-    my $param = $self->config->{email};
+    my $param = $self->config->{notifications}->{mail};
     my $hostname = $self->config->{hostname};
     my (%service_id, @recipients);
 
-    foreach my $mail_to (keys %{ $self->{mails} }) {
-        my $mails = $self->{mails}->{$mail_to};
+    foreach my $mail_to (keys %{ $self->{notifications}->{mail} }) {
+        my $mails = $self->{notifications}->{mail}->{$mail_to};
         my $subject = $param->{subject};
         my (%status, $status, $redirect, @id);
 
@@ -2391,7 +2539,7 @@ sub send_mails {
             push @id, $m;
             $status{ $m->{status} }++;
             $message .= "---\n";
-            $message .= "Service: $m->{service}\n";
+            $message .= "Service: $m->{service_name}\n";
             $message .= "Status: $m->{status}\n";
             $message .= "Message: $m->{message}\n";
 
@@ -2470,8 +2618,6 @@ sub send_mails {
             $message,
         );
 
-        # Update "last_mail" first if sendmail was successful,
-        # but only if the status is not OK
         foreach my $id (@id) {
             if ($id->{status} ne "OK") {
                 $service_id{$id->{service_id}}++;
@@ -2479,38 +2625,24 @@ sub send_mails {
         }
     }
 
-    foreach my $id (keys %service_id) {
-        $self->log->notice("update last mail to", $self->etime, "for service $id");
-        $self->db->save_service_status($id, { last_mail => $self->etime, last_mail_time => $self->etime });
-    }
+    # Update last_notification first if sendmail was successful,
+    # but only if the status is not OK
+    $self->update_last_notification(keys %service_id);
 }
 
-sub save_mail {
-    my ($self, %mail) = @_;
-    my $mails = $self->{mails};
-    my $to = delete $mail{mail_to};
+sub update_last_notification {
+    my ($self, @ids) = @_;
 
-    if ($self->log->is_debug) {
-        $self->log->debug("saved mail:");
-        $self->log->dump(debug => \%mail);
+    if (@ids) {
+        $self->log->notice(
+            "update last_notification to", $self->etime,
+            "for service ids", @ids
+        );
+        $self->db->update_service_status(\@ids, {
+            last_notification_1 => $self->etime,
+            last_notification_2 => $self->etime
+        });
     }
-
-    push @{$mails->{$to}}, \%mail;
-}
-
-sub save_sms {
-    my ($self, %sms) = @_;
-    my $sms = $self->{sms};
-    my $to = delete $sms{sms_to};
-
-    $to =~ s/^\+/00/;
-
-    if ($self->log->is_debug) {
-        $self->log->debug("saved sms:");
-        $self->log->dump(debug => \%sms);
-    }
-
-    push @{$sms->{$to}}, \%sms;
 }
 
 sub get_service_flaps_by_time {
