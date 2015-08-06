@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.30
+Version: 0.31
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -166,6 +166,10 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Thu Aug 06 2015 Jonny Schulz <js@bloonix.de> - 0.31-1
+- Heavy changes and code improvements.
+- Kicked sms* and mail* parameter.
+- Re-designed the notification handling.
 * Tue Jun 16 2015 Jonny Schulz <js@bloonix.de> - 0.30-1
 - bloonix-update-agent-host-config now checks on a very simple
   way if sysvinit or systemctl must be used to restart the agent.
