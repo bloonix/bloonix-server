@@ -290,6 +290,10 @@ sub process_http_request {
 
     $self->process_request;
     $self->post_process_request;
+
+    if ($self->host) {
+        $self->log->warning("\nDEPRECATED", $self->host->{id}, $self->host->{hostname});
+    }
 }
 
 sub pre_process_request {
@@ -305,6 +309,8 @@ sub pre_process_request {
 
 sub process_request {
     my $self = shift;
+
+    $self->host(undef);
 
     if ($self->request->{action} eq "get-services" || $self->request->{action} eq "post-service-data") {
         $self->check_request or return;
@@ -1234,7 +1240,7 @@ sub check_service_attempt_counter {
             if ($self->c_service->{attempt_counter} == $self->c_service->{attempt_max}) {
                 if ($self->c_service->{attempt_warn2crit} == 1) {
                     $self->log->notice("attempt_max exceeded, status critical");
-                    $self->n_service->{status} = $self->n_status = "CRITICAL";
+                    $self->n_service->{status} = $self->service_status->{status} = "CRITICAL";
                 }
             }
         }
@@ -2057,7 +2063,7 @@ sub update_host_status {
 sub store_stats {
     my ($self, $data) = @_;
 
-    if (!$self->n_service->{plugin_id}) {
+    if (!$self->c_service->{plugin_id}) {
         return;
     }
 
