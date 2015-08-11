@@ -1641,7 +1641,7 @@ sub check_if_srvchk_remote_error {
         status => $self->n_service->{status},
         message_service => "mail",
         message => $self->n_service->{message},
-        mail_to => $redirect_config->{mail_to},
+        send_to => $redirect_config->{mail_to},
         description => $self->c_service->{description},
         comment => $self->c_service->{comment},
         redirect => 1
