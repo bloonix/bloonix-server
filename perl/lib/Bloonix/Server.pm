@@ -396,7 +396,7 @@ sub check_request {
         return undef;
     }
 
-    $self->whoami($request->{whoami});
+    $self->whoami($request->{whoami} // "n/a");
     $self->log->set_pattern("%Y", "Y", "host id $request->{host_id}");
     $self->log->notice("processing request");
 
@@ -1644,7 +1644,6 @@ sub check_if_srvchk_remote_error {
         mail_to => $redirect_config->{mail_to},
         description => $self->c_service->{description},
         comment => $self->c_service->{comment},
-        escalation => "-1",
         redirect => 1
     );
 
@@ -2409,7 +2408,7 @@ sub gen_sms_message {
     }
 
     if ($redirect) {
-        $message = "RAD: $message";
+        $message = "REMOTE AGENT DEAD: $message";
     }
 
     if (length($message) > 160) {
@@ -2579,7 +2578,7 @@ sub send_mails {
         $subject =~ s/%s/$status/;
 
         if ($redirect) {
-            $subject = "RAD: $subject";
+            $subject = "REMOTE AGENT DEAD: $subject";
         }
 
         my %email = (
