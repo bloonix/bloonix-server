@@ -314,7 +314,7 @@ sub update_hosts {
         system("mv /var/tmp/bloonix-agent-hosts.conf /etc/bloonix/agent/conf.d/hosts.conf");
         system("chown root:bloonix /etc/bloonix/agent/conf.d/hosts.conf");
         system("chmod 640 /etc/bloonix/agent/conf.d/hosts.conf");
-        system("/etc/init.d/bloonix-agent reload");
+        system("if test -e '/etc/init.d/bloonix-agent' ; then /etc/init.d/bloonix-agent reload ; else systemctl reload bloonix-agent.service ; fi");
         return;
     }
 
