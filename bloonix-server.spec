@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.31
+Version: 0.32
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -166,6 +166,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sat Aug 15 2015 Jonny Schulz <js@bloonix.de> - 0.32-1
+- Bloonix::Server dies now if no /usr/sbin/sendmail is found.
 * Thu Aug 06 2015 Jonny Schulz <js@bloonix.de> - 0.31-1
 - Heavy changes and code improvements.
 - Kicked sms* and mail* parameter.
