@@ -82,6 +82,10 @@ if ($version) {
     exit 0;
 }
 
+if (!-x "/usr/sbin/sendmail") {
+    die "no /usr/sbin/sendmail executable found";
+}
+
 Bloonix::ServiceChecker->run(
     config_file => $config_file,
     pid_file => $pid_file

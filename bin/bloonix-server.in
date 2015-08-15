@@ -76,6 +76,10 @@ if ($pidfile) {
     $options{pid_file} = $pidfile;
 }
 
+if (!-x "/usr/sbin/sendmail") {
+    die "no /usr/sbin/sendmail executable found";
+}
+
 Bloonix::Server->run(\%options);
 
 exit 0;
