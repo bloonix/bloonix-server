@@ -1,3 +1,9 @@
+bloonix-server (0.34-1) unstable; urgency=low
+
+    * Fixed: Can't modify non-lvalue subroutine call at Server.pm line 1379.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 18 Aug 2015 20:48:50 +0200
+
 bloonix-server (0.33-1) unstable; urgency=low
 
     * Fixed %preun section in spec file.

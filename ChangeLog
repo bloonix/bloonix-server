@@ -1,3 +1,7 @@
+bloonix-server (0.34) released at 2015-08-18
+
+    * Fixed: Can't modify non-lvalue subroutine call at Server.pm line 1379.
+
 bloonix-server (0.33) released at 2015-08-18
 
     * Fixed %preun section in spec file.

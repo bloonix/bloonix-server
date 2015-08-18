@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.33
+Version: 0.34
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.34-1
+- Fixed: Can't modify non-lvalue subroutine call at Server.pm line 1379.
 * Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.33-1
 - Fixed %preun section in spec file.
 - Moved the creation of user bloonix into the core package.

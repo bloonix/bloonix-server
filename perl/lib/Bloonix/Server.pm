@@ -1376,7 +1376,7 @@ sub check_volatile_service_status {
     if ($self->service_status->{volatile_status}) {
         if ($self->stat_by_prio->get($self->n_status) < $self->stat_by_prio->get($self->c_status)) {
             $self->log->info("overwrite service status from", $self->n_status, "to volatile status", $self->c_status);
-            $self->service_status->{status} = $self->n_service->{status} = $self->n_status = $self->c_status;
+            $self->service_status->{status} = $self->n_service->{status} = $self->n_status->{status} = $self->c_status;
         }
         $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
     }
