@@ -165,6 +165,7 @@ rm -rf %{buildroot}
 %changelog
 * Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.33-1
 - Fixed %preun section in spec file.
+- Moved the creation of user bloonix into the core package.
 * Sat Aug 15 2015 Jonny Schulz <js@bloonix.de> - 0.32-1
 - Bloonix::Server dies now if no /usr/sbin/sendmail is found.
 * Thu Aug 06 2015 Jonny Schulz <js@bloonix.de> - 0.31-1

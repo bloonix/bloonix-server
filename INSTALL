@@ -1,6 +1,3 @@
-getent group bloonix >/dev/null || /usr/sbin/groupadd bloonix
-getent passwd bloonix >/dev/null || /usr/sbin/useradd \
-    bloonix -g bloonix -s /sbin/nologin -d /var/run/bloonix -r
 perl Configure.PL
 make
 make install
