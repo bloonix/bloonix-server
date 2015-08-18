@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.32
+Version: 0.33
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -67,7 +67,7 @@ install -d -m 0750 ${RPM_BUILD_ROOT}%{rundir}
 install -c -m 0444 LICENSE ${RPM_BUILD_ROOT}%{docdir}/
 install -c -m 0444 ChangeLog ${RPM_BUILD_ROOT}%{docdir}/
 
-%if %{?with_systemd}
+%if 0%{?with_systemd}
 install -p -D -m 0644 %{buildroot}%{blxdir}/etc/systemd/bloonix-server.service %{buildroot}%{_unitdir}/bloonix-server.service
 install -p -D -m 0644 %{buildroot}%{blxdir}/etc/systemd/bloonix-srvchk.service %{buildroot}%{_unitdir}/bloonix-srvchk.service
 %else
@@ -86,9 +86,9 @@ getent passwd bloonix >/dev/null || /usr/sbin/useradd \
 
 %post
 /usr/bin/bloonix-init-server
-%if %{?with_systemd}
-systemctl preset bloonix-server.service
-systemctl preset bloonix-srvchk.service
+%if 0%{?with_systemd}
+%systemd_post bloonix-server.service
+%systemd_post bloonix-srvchk.service
 systemctl condrestart bloonix-srvchk.service
 systemctl condrestart bloonix-server.service
 %else
@@ -99,20 +99,22 @@ systemctl condrestart bloonix-server.service
 %endif
 
 %preun
-if [ $1 -eq 0 ]; then
-%if %{?with_systemd}
-systemctl --no-reload disable bloonix-srvchk.service
-systemctl stop bloonix-srvchk.service
-systemctl --no-reload disable bloonix-server.service
-systemctl stop bloonix-server.service
-systemctl daemon-reload
+%if 0%{?with_systemd}
+%systemd_preun bloonix-srvchk.service
+%systemd_preun bloonix-server.service
 %else
-/sbin/service bloonix-srvchk stop &>/dev/null || :
-/sbin/service bloonix-server stop &>/dev/null || :
-/sbin/chkconfig --del bloonix-srvchk
-/sbin/chkconfig --del bloonix-server
-%endif
+if [ $1 -eq 0 ]; then
+    /sbin/service bloonix-srvchk stop &>/dev/null || :
+    /sbin/service bloonix-server stop &>/dev/null || :
+    /sbin/chkconfig --del bloonix-srvchk
+    /sbin/chkconfig --del bloonix-server
 fi
+%endif
+
+%postun
+%if 0%{?with_systemd}
+%systemd_postun
+%endif
 
 %clean
 rm -rf %{buildroot}
@@ -147,7 +149,7 @@ rm -rf %{buildroot}
 %{_bindir}/bloonix-roll-forward-log
 %{_bindir}/bloonix-update-agent-host-config
 
-%if %{?with_systemd} == 1
+%if 0%{?with_systemd}
 %{_unitdir}/bloonix-server.service
 %{_unitdir}/bloonix-srvchk.service
 %else
@@ -166,6 +168,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.33-1
+- Fixed %preun section in spec file.
 * Sat Aug 15 2015 Jonny Schulz <js@bloonix.de> - 0.32-1
 - Bloonix::Server dies now if no /usr/sbin/sendmail is found.
 * Thu Aug 06 2015 Jonny Schulz <js@bloonix.de> - 0.31-1
