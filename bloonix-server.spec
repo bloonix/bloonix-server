@@ -79,11 +79,6 @@ cd perl;
 %{__perl} Build install destdir=%{buildroot} create_packlist=0
 find %{buildroot} -name .packlist -exec %{__rm} {} \;
 
-%pre
-getent group bloonix >/dev/null || /usr/sbin/groupadd bloonix
-getent passwd bloonix >/dev/null || /usr/sbin/useradd \
-    bloonix -g bloonix -s /sbin/nologin -d /var/run/bloonix -r
-
 %post
 /usr/bin/bloonix-init-server
 %if 0%{?with_systemd}
