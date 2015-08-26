@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.33";
+our $VERSION = "0.34";
 
 sub run {
     my $class = shift;
@@ -581,6 +581,9 @@ sub get_services {
         if ($service->{force_check}) {
             $self->log->info("service $service->{service_id} check forced");
             $self->db->update_force_check($service->{service_id}, 0);
+            push @services, $service;
+        } elsif ($service->{last_check} - 30 > $self->etime) { # - 15 to prevent race conditions
+            $self->log->warning("last_check is higher than current time, ntp issue?");
             push @services, $service;
         } elsif ($service->{status} eq "OK") {
             if ($service->{last_check} + $service->{interval} <= $self->etime) {
@@ -1376,7 +1379,8 @@ sub check_volatile_service_status {
     if ($self->service_status->{volatile_status}) {
         if ($self->stat_by_prio->get($self->n_status) < $self->stat_by_prio->get($self->c_status)) {
             $self->log->info("overwrite service status from", $self->n_status, "to volatile status", $self->c_status);
-            $self->service_status->{status} = $self->n_service->{status} = $self->n_status->{status} = $self->c_status;
+            $self->service_status->{status} = $self->c_status;
+            $self->n_status($self->c_status);
         }
         $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
     }
