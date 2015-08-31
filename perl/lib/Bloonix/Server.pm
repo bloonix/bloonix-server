@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.34";
+our $VERSION = "0.35";
 
 sub run {
     my $class = shift;
@@ -926,6 +926,11 @@ sub pre_check_notification_status {
     # No notification if the status isn't changed and the status is acknowledged
     if ($self->n_status eq $self->c_status && $self->c_service->{acknowledged} == 1) {
         $self->log->notice("service status is acknowledged");
+        return 1;
+    }
+
+    if ($self->c_service->{attempt_max} == 0) {
+        $self->log->notice("attempt_max = 0 = notification disabled");
         return 1;
     }
 

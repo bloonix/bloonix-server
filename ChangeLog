@@ -1,6 +1,7 @@
-bloonix-server (0.35) released at 2015-08-XX
+bloonix-server (0.35) released at 2015-08-31
 
     * Fixed: try to prevent ntp issues by calculating the next service check.
+    * If attempt_max is set to 0 then notifications are disabled.
 
 bloonix-server (0.34) released at 2015-08-18
 
