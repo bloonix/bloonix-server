@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.34
+Version: 0.35
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Aug 31 2015 Jonny Schulz <js@bloonix.de> - 0.35-1
+- Fixed: try to prevent ntp issues by calculating the next service check.
+- If attempt_max is set to 0 then notifications are disabled.
 * Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.34-1
 - Fixed: Can't modify non-lvalue subroutine call at Server.pm line 1379.
 * Tue Aug 18 2015 Jonny Schulz <js@bloonix.de> - 0.33-1
