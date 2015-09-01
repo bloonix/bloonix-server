@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.35
+Version: 0.36
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Sep 01 2015 Jonny Schulz <js@bloonix.de> - 0.36-1
+- Added field force_event to table service.
+- The server disconnects now if the db schema version changed.
 * Mon Aug 31 2015 Jonny Schulz <js@bloonix.de> - 0.35-1
 - Fixed: try to prevent ntp issues by calculating the next service check.
 - If attempt_max is set to 0 then notifications are disabled.
