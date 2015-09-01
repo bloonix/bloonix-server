@@ -820,6 +820,7 @@ sub check_services {
     CHECK:
     foreach my $service_id (keys %$data) {
         $self->event_tags->clear;
+        $self->force_timed_event(0);
         $self->service_has_active_dependency(0);
         $self->service_id($service_id);
         $self->n_service($data->{$service_id});
@@ -1702,7 +1703,7 @@ sub save_service_event {
         || ($self->n_status !~ /^(OK|INFO)\z/ && !$self->attempt_max_reached->get($self->service_id))
     ) {
         $self->log->notice(
-            "safe event",
+            "save event",
             status => $self->n_status,
             service => $self->service_id,
             message => $self->n_service->{message}

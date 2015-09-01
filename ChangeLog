@@ -1,3 +1,7 @@
+bloonix-server (0.37) released at 2015-09-01
+
+    * Fixed: force_timed_event is now resetted.
+
 bloonix-server (0.36) released at 2015-09-01
 
     * Added field force_event to table service.
