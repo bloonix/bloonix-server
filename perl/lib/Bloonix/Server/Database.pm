@@ -796,7 +796,7 @@ sub get_maintenance {
     my $maintenance = $self->dbi->unique(
         $self->sql->select(
             table => "maintenance",
-            column => "active"
+            column => "*"
         )
     );
 
