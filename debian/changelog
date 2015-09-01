@@ -1,3 +1,9 @@
+bloonix-server (0.37-1) unstable; urgency=low
+
+    * Fixed: force_timed_event is now resetted.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 01 Sep 2015 02:37:05 +0200
+
 bloonix-server (0.36-1) unstable; urgency=low
 
     * Added field force_event to table service.
