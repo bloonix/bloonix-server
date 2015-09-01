@@ -800,6 +800,16 @@ sub get_maintenance {
         )
     );
 
+    if (defined $maintenance->{version}) {
+        if (!defined $self->{maintenance_version}) {
+            $self->{maintenance_version} = $maintenance->{version};
+        } elsif ($self->{maintenance_version} ne $maintenance->{version}) {
+            $self->{maintenance_version} = $maintenance->{version};
+            $self->log->warning("db schema version changed, disconnect");
+            $self->dbi->disconnect;
+        }
+    }
+
     return $maintenance->{active};
 }
 

@@ -837,6 +837,10 @@ sub check_services {
             last_check => $self->etime
         });
 
+        if ($self->c_service->{force_event}) {
+            $self->service_status->{force_event} = 0;
+        }
+
         $self->log->notice(
             "start checking",
             "service id", $service_id,
@@ -1405,7 +1409,10 @@ sub check_last_event {
     my $self = shift;
     my $month_now = $self->year_month_stamp;
     my $month_last_event = $self->year_month_stamp($self->c_service->{last_event});
-    $self->force_timed_event($month_now ne $month_last_event);
+
+    if ($month_now ne $month_last_event || $self->c_service->{force_event}) {
+        $self->force_timed_event(1);
+    }
 }
 
 sub check_if_max_sms_reached {
