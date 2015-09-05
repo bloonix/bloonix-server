@@ -717,7 +717,7 @@ sub validate_data {
     my $services = $self->host_services;
     my (%checked, %stats);
 
-    if (ref($data) ne "HASH") {
+    if (ref $data ne "HASH") {
         $self->log->error("bad data structure received from agent");
         return undef;
     }
@@ -2073,12 +2073,22 @@ sub update_host_status {
         $update{status_since} = $self->etime;
     }
 
+    if ($status ne $curstat) {
+        my $cs_is_ok = $curstat =~ /^(OK|INFO)\z/;
+        my $ns_is_ok = $status =~ /^(OK|INFO)\z/;
+
+        if (($cs_is_ok && !$ns_is_ok) || (!$cs_is_ok && $ns_is_ok)) {
+            $update{status_nok_since} = $self->etime;
+        }
+    }
+
     $self->db->update_host_status($host_id => \%update);
 }
 
 sub store_stats {
-    my ($self, $data) = @_;
+    my $self = shift;
 
+    # statistics of simple scripts are not stored
     if (!$self->c_service->{plugin_id}) {
         return;
     }
@@ -2102,7 +2112,7 @@ sub store_stats {
 
     $self->log->info("store statistics");
 
-    # Request the plugin data first if its really necessary.
+    # The plugin data are cached for each loop a host is processed.
     if (!$self->plugin_def) {
         $self->plugin_def($self->db->get_plugin);
         $self->plugin_stat($self->db->get_plugin_stats);

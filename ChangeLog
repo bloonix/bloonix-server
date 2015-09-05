@@ -1,3 +1,7 @@
+bloonix-server (0.38) released at 2015-XX-XX
+
+    * status_nok_since is now updated correctly in table host.
+
 bloonix-server (0.37) released at 2015-09-01
 
     * Fixed: force_timed_event is now resetted.
