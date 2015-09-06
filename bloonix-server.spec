@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.37
+Version: 0.38
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sun Sep 06 2015 Jonny Schulz <js@bloonix.de> - 0.38-1
+- status_nok_since is now updated correctly in table host.
 * Tue Sep 01 2015 Jonny Schulz <js@bloonix.de> - 0.37-1
 - Fixed: force_timed_event is now resetted.
 * Tue Sep 01 2015 Jonny Schulz <js@bloonix.de> - 0.36-1
