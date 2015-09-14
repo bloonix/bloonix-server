@@ -153,6 +153,11 @@ sub tcp_server {
         mode => {
             type => Params::Validate::SCALAR,
             default => "failover"
+        },
+        force_ipv4 => {
+            type => Params::Validate::SCALAR,
+            regex => qr/^(yes|1|no|0)\z/,
+            default => "no"
         }
     });
 
