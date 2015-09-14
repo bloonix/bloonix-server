@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.38
+Version: 0.39
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Sep 14 2015 Jonny Schulz <js@bloonix.de> - 0.39-1
+- Enabled IPv6 support.
 * Sun Sep 06 2015 Jonny Schulz <js@bloonix.de> - 0.38-1
 - status_nok_since is now updated correctly in table host.
 * Tue Sep 01 2015 Jonny Schulz <js@bloonix.de> - 0.37-1
