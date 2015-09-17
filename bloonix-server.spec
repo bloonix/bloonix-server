@@ -165,6 +165,7 @@ rm -rf %{buildroot}
 %changelog
 * Mon Sep 14 2015 Jonny Schulz <js@bloonix.de> - 0.39-1
 - Enabled IPv6 support.
+- Fixed tags that were not added to events.
 * Sun Sep 06 2015 Jonny Schulz <js@bloonix.de> - 0.38-1
 - status_nok_since is now updated correctly in table host.
 * Tue Sep 01 2015 Jonny Schulz <js@bloonix.de> - 0.37-1
