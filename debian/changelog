@@ -1,3 +1,10 @@
+bloonix-server (0.40-1) unstable; urgency=low
+
+    * Fixed tags that were not added to events.
+    * Added variable IPADDR6.
+
+ -- Jonny Schulz <js@bloonix.de>  Thu, 17 Sep 2015 17:38:04 +0200
+
 bloonix-server (0.39-1) unstable; urgency=low
 
     * Enabled IPv6 support.

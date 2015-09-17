@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.39
+Version: 0.40
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Thu Sep 17 2015 Jonny Schulz <js@bloonix.de> - 0.40-1
+- Fixed tags that were not added to events.
+- Added variable IPADDR6.
 * Mon Sep 14 2015 Jonny Schulz <js@bloonix.de> - 0.39-1
 - Enabled IPv6 support.
 - Fixed tags that were not added to events.
