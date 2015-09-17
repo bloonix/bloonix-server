@@ -856,6 +856,10 @@ sub check_services {
             || $self->check_if_downtime_is_active
             || $self->check_if_srvchk_remote_error;
 
+        if ($self->n_service->{tags} && $self->n_service->{tags} =~ /^\w+(,\w+){0,}\z/) {
+            $self->event_tags->push(split /,/, $self->n_service->{tags});
+        }
+
         $self->prepare_service_data;
         $self->check_service_message_tags($self->n_service->{message});
         $self->check_service_notification_status;

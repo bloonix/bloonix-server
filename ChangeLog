@@ -1,6 +1,7 @@
 bloonix-server (0.39) released at 2015-09-14
 
     * Enabled IPv6 support.
+    * Fixed tags that were not added to events.
 
 bloonix-server (0.38) released at 2015-09-06
 
