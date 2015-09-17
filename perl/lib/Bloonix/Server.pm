@@ -452,6 +452,9 @@ sub process_get_services {
     if (!exists $host_variables->{IPADDR}) {
         $host_variables->{IPADDR} = $host->{ipaddr};
     }
+    if (!exists $host_variables->{IPADDR6}) {
+        $host_variables->{IPADDR6} = $host->{ipaddr6};
+    }
 
     foreach my $service (@$services) {
         # Remove all whitespaces and newlines so that we can
