@@ -1,3 +1,7 @@
+bloonix-server (0.41) released at 2015-09-18
+
+    * Fixed uninitialized variable IPADDR6.
+
 bloonix-server (0.40) released at 2015-09-17
 
     * Fixed tags that were not added to events.

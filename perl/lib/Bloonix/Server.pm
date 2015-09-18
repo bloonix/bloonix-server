@@ -476,10 +476,10 @@ sub process_get_services {
             }
 
             foreach my $key (keys %variables) {
-                next if $key !~ /^[a-zA-Z_0-9\.\s]+\z/;
-                next if $key =~ /^\s*\z/;
-                $self->log->info("replace %$key% with $variables{$key}");
-                $service->{command_options} =~ s/%$key%/$variables{$key}/g;
+                if ($key =~ /^[a-zA-Z_0-9\.\s]+\z/ && $key !~ /^\s*\z/ && defined $variables{$key}) {
+                    $self->log->info("replace %$key% with $variables{$key}");
+                    $service->{command_options} =~ s/%$key%/$variables{$key}/g;
+                }
             }
 
             $service->{command_options} = $self->json->decode($service->{command_options});

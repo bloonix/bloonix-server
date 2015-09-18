@@ -1,3 +1,9 @@
+bloonix-server (0.41-1) unstable; urgency=low
+
+    * Fixed uninitialized variable IPADDR6.
+
+ -- Jonny Schulz <js@bloonix.de>  Fri, 18 Sep 2015 10:39:13 +0200
+
 bloonix-server (0.40-1) unstable; urgency=low
 
     * Fixed tags that were not added to events.

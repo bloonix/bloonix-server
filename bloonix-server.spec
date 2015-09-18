@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.40
+Version: 0.41
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -163,6 +163,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Fri Sep 18 2015 Jonny Schulz <js@bloonix.de> - 0.41-1
+- Fixed uninitialized variable IPADDR6.
 * Thu Sep 17 2015 Jonny Schulz <js@bloonix.de> - 0.40-1
 - Fixed tags that were not added to events.
 - Added variable IPADDR6.
