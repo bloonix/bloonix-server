@@ -142,6 +142,7 @@ rm -rf %{buildroot}
 %{_bindir}/bloonix-init-server
 %{_bindir}/bloonix-roll-forward-log
 %{_bindir}/bloonix-update-agent-host-config
+%{_bindir}/bloonix-create-test-hosts
 
 %if 0%{?with_systemd}
 %{_unitdir}/bloonix-server.service
