@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.41
+Version: 0.42
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,11 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Nov 16 2015 Jonny Schulz <js@bloonix.de> - 0.42-1
+- Kicked deprecated fcgi support.
+- Fixed paths in systemd files if the server
+  is installed manually.
+- Implemented Bloonix::NetAddr to parse IP ranges.
 * Fri Sep 18 2015 Jonny Schulz <js@bloonix.de> - 0.41-1
 - Fixed uninitialized variable IPADDR6.
 * Thu Sep 17 2015 Jonny Schulz <js@bloonix.de> - 0.40-1
