@@ -1,3 +1,10 @@
+bloonix-server (0.42) released at 2015-11-15
+
+    * Kicked deprecated fcgi support.
+    * Fixed paths in systemd files if the server
+      is installed manually.
+    * Implemented Bloonix::NetAddr to parse IP ranges.
+
 bloonix-server (0.41) released at 2015-09-18
 
     * Fixed uninitialized variable IPADDR6.

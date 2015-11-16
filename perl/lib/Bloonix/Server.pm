@@ -16,8 +16,8 @@ Log::Handler->create_logger("bloonix")->set_pattern("%X", "X", "n/a"); # client 
 Log::Handler->get_logger("bloonix")->set_pattern("%Y", "Y", "n/a"); # host id
 
 use Bloonix::HangUp;
-use Bloonix::FCGI;
 use Bloonix::IO::SIPC;
+use Bloonix::NetAddr;
 use Bloonix::ProcManager;
 use Bloonix::Server::Validate;
 use Bloonix::Server::Database;
@@ -25,9 +25,9 @@ use Bloonix::Timeperiod;
 use Bloonix::REST;
 
 use base qw/Bloonix::Accessor/;
-__PACKAGE__->mk_accessors(qw/config log tlog ipc db done rest json proc proc_helper fcgi cgi sipc client peerhost select/);
+__PACKAGE__->mk_accessors(qw/config log tlog ipc db done rest json proc proc_helper sipc client peerhost select/);
 __PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies service_has_active_dependency/);
-__PACKAGE__->mk_accessors(qw/host stime etime mtime company request request_type host_down whoami runtime max_sms_reached sms_enabled/);
+__PACKAGE__->mk_accessors(qw/host stime etime mtime company request host_down whoami runtime max_sms_reached sms_enabled/);
 __PACKAGE__->mk_accessors(qw/force_timed_event es_index maintenance locations plugin plugin_def plugin_stat/);
 __PACKAGE__->mk_accessors(qw/service_status service_status_duration service_id c_service n_service c_status n_status service_interval service_timeout/);
 __PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.41";
+our $VERSION = "0.42";
 
 sub run {
     my $class = shift;
@@ -43,11 +43,6 @@ sub run {
     my $self = bless $opts, $class;
 
     $self->init;
-
-    if ($self->config->{fcgi_server}) {
-        return $self->run_deprecated;
-    }
-
     $self->sipc(Bloonix::IO::SIPC->new($self->config->{tcp_server}));
     $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager}));
 
@@ -59,47 +54,8 @@ sub run {
             }
         };
     }
-}
 
-sub run_deprecated {
-    my $self = shift;
-
-    $self->log->warning(
-        "DEPRECATED WARNING:",
-        "The usage of the parameter 'port' and 'listen' is deprecated",
-        "in the section proc_manager! Please use the section tcp_server",
-        "instead and upgrade the bloonix-agents on all your machines.",
-        "You can find more information in the configuration documentation",
-        "of the bloonix server"
-    );
-
-    $self->select(IO::Select->new);
-    $self->fcgi(Bloonix::FCGI->new($self->config->{fcgi_server}));
-    $self->select->add($self->fcgi->sock);
-    $self->sipc(Bloonix::IO::SIPC->new($self->config->{tcp_server}));
-    $self->select->add($self->sipc->sock);
-    $self->proc(Bloonix::ProcManager->new($self->config->{proc_manager}));
-
-    while (!$self->proc->done) {
-        eval {
-            $self->proc->set_status_waiting;
-            my @ready = $self->select->can_read;
-
-            foreach my $fh (@ready) {
-                next unless $fh;
-
-                if ($fh == $self->sipc->sock) {
-                    $self->process_tcp_request;
-                } elsif ($fh == $self->fcgi->sock) {
-                    $self->process_http_request(0.5);
-                }
-            }
-        };
-
-        if ($@) {
-            $self->log->trace(error => $@);
-        }
-    }
+    $self->log->warning("bloonix server stopped");
 }
 
 sub init {
@@ -220,80 +176,17 @@ sub process_tcp_request {
     }
 
     $self->proc->set_status_processing(
-        client  => $client->sock->peerhost,
+        client  => $client->sock->peeraddr,
         request => join(" ", $request->{action})
     );
 
     $self->log->info("process tcp request");
     $self->peerhost($client->sock->peerhost);
     $self->client($client);
-    $self->request_type("tcp");
     $self->request($request);
     $self->pre_process_request;
     $self->process_request;
     $self->post_process_request;
-}
-
-# The http method is deprecated. For backward compability the
-# http request is converted into a tcp request.
-sub process_http_request {
-    my $self = shift;
-
-    $self->log->info("wait for http connection");
-    $self->fcgi->accept(0.5) or return;
-
-    $self->proc->set_status_reading;
-    my $cgi = $self->fcgi->get_new_cgi or return;
-
-    $self->proc->set_status_processing(
-        client  => $cgi->remote_addr,
-        request => join(" ", $cgi->request_method, $cgi->request_uri)
-    );
-
-    $self->log->info("process http request");
-    $self->peerhost($cgi->remote_addr);
-    $self->cgi($cgi);
-    $self->request_type("http");
-    $self->pre_process_request;
-
-    $self->request({});
-
-    if ($self->cgi->path_info eq "/ping") {
-        $self->request->{action} = "ping";
-    } elsif ($self->cgi->path_info =~ m!^/hostcheck/(.+)\z!) {
-        $self->request->{action} = "hostcheck";
-        $self->request->{hostkey} = $1;
-    } elsif ($self->cgi->path_info eq "/server-status") {
-        $self->request->{action} = "server-status";
-        $self->request->{authkey} = $self->cgi->param("authkey") || 0;
-        $self->request->{pretty} = defined $self->cgi->param("pretty") ? 1 : 0;
-        $self->request->{plain} = defined $self->cgi->param("plain") ? 1 : 0;
-    } else {
-        if (!$self->cgi->postdata) {
-            $self->log->warning("no post data received");
-            $self->response({ status => "err", message => "no post data received" });
-            return undef;
-        }
-
-        my $data = $self->cgi->jsondata // $self->json->decode($self->cgi->postdata);
-
-        foreach my $key (keys %$data) {
-            $self->request->{$key} = $data->{$key};
-        }
-
-        if ($self->cgi->request_method eq "GET") {
-            $self->request->{action} = "get-services";
-        } elsif ($self->cgi->request_method eq "POST") {
-            $self->request->{action} = "post-service-data";
-        }
-    }
-
-    $self->process_request;
-    $self->post_process_request;
-
-    if ($self->host) {
-        $self->log->warning("\nDEPRECATED", $self->host->{id}, $self->host->{hostname});
-    }
 }
 
 sub pre_process_request {
@@ -323,7 +216,11 @@ sub process_request {
         }
     } elsif ($self->request->{action} eq "ping") {
         $self->response({ status => "ok", message => "pong" });
-    } elsif ($self->request->{action} eq "hostcheck" && $self->request->{hostkey} && $self->request->{hostkey} =~ m!^(.+)\.([^\s.]+)\z!) {
+    } elsif (
+        $self->request->{action} eq "hostcheck" &&
+        $self->request->{hostkey} &&
+        $self->request->{hostkey} =~ m!^(.+)\.([^\s.]+)\z!
+    ) {
         $self->process_host_check($1, $2);
     } elsif ($self->request->{action} eq "server-status") {
         $self->process_server_status;
@@ -359,13 +256,15 @@ sub process_server_status {
     my $self = shift;
 
     my $server_status = $self->config->{server_status};
-    my $allow_from = $server_status->{allow_from};
     my $addr = $self->peerhost;
     my $authkey = $self->request->{authkey} || 0;
     my $plain = $self->request->{plain} || 0;
     my $pretty = $self->request->{pretty} || 0;
 
-    if ($allow_from->{all} || $allow_from->{$addr} || ($server_status->{authkey} && $server_status->{authkey} eq $authkey)) {
+    if (
+        Bloonix::NetAddr->ip_in_range($self->peerhost, $server_status->{allow_from})
+        || ($server_status->{authkey} && $server_status->{authkey} eq $authkey)
+    ) {
         $self->log->info("server status request from $addr - access allowed");
         $self->proc->set_status_sending;
 
@@ -554,7 +453,7 @@ sub process_get_services {
             # REMOVE
             # Deprecated... the interval setting can be removed
             # if all agents running with version 0.24.
-            interval => $host->{interval}
+            #interval => $host->{interval}
         }
     });
 }
@@ -595,16 +494,25 @@ sub get_services {
             }
         } elsif ($service->{attempt_counter} < $service->{attempt_max}) {
             if ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
-                $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry $service->{retry_interval}s)");
+                $self->log->info(
+                    "service $service->{service_id} forced to be ready",
+                    "(attempts $counter retry $service->{retry_interval}s)"
+                );
                 push @services, $service;
             }
         } elsif ($service->{retry_interval} < 60) {
             if ($service->{last_check} + 60 <= $self->etime) {
-                $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry 60s fixed)");
+                $self->log->info(
+                    "service $service->{service_id} forced to",
+                    "be ready (attempts $counter retry 60s fixed)"
+                );
                 push @services, $service;
             }
         } elsif ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
-            $self->log->info("service $service->{service_id} forced to be ready (attempts $counter retry $service->{retry_interval})");
+            $self->log->info(
+                "service $service->{service_id} forced to be ready",
+                "(attempts $counter retry $service->{retry_interval})"
+            );
             push @services, $service;
         }
     }
@@ -1355,10 +1263,11 @@ sub check_nok_service_status {
     # status_since
     #    The time in epoch since the service is in this status
     if ($self->c_status ne $self->n_status) {
-        my $cs_is_ok = $self->c_status =~ /^(OK|INFO)\z/;
-        my $ns_is_ok = $self->n_status =~ /^(OK|INFO)\z/;
+        my $cs_is_ok = $self->c_status =~ /^(OK|INFO)\z/ ? 1 : 0;
+        my $ns_is_ok = $self->n_status =~ /^(OK|INFO)\z/ ? 1 : 0;
 
-        if (($cs_is_ok && !$ns_is_ok) || (!$cs_is_ok && $ns_is_ok)) {
+        #if (($cs_is_ok && !$ns_is_ok) || (!$cs_is_ok && $ns_is_ok)) {
+        if ($cs_is_ok != $ns_is_ok) {
             $self->service_status->{status_nok_since} = $self->etime;
         }
 
@@ -2815,19 +2724,34 @@ sub year_month_stamp {
 sub response {
     my ($self, $data) = @_;
 
-    if ($self->request_type eq "tcp") {
-        $self->client->send($data);
-        #$self->client->disconnect;
-    } elsif ($self->request_type eq "http") {
-        if ($data->{data} && $data->{plain}) {
-            print "Content-Type: text/plain\n\n";
-            print $data->{data};
-        } else {
-            print "Content-Type: application/json\n\n";
-            print $self->json->encode($data);
+    $self->client->send($data);
+    #$self->client->disconnect;
+}
+
+sub ip_in_range {
+    my ($self, $a, $b) = @_;
+    my $ret;
+
+    $a =~ s/\s//g;
+    $b =~ s/\s//g;
+
+    eval {
+        my $ip_a = NetAddr::IP->new($a);
+
+        foreach my $ip (split /,/, $b) {
+            # compare only ipv4 with ipv4 and ipv6 with ipv6
+            if (($a =~ /:/ && $ip =~ /:/) || ($a !~ /:/ && $ip !~ /:/)) {
+                my $ip_b = NetAddr::IP->new($ip);
+
+                if ($ip_a->within($ip_b)) {
+                    $ret = 1;
+                    last;
+                }
+            }
         }
-        $self->fcgi->finish;
-    }
+    };
+
+    return $ret;
 }
 
 1;

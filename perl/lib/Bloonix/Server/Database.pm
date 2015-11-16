@@ -3,7 +3,9 @@ package Bloonix::Server::Database;
 use strict;
 use warnings;
 use Bloonix::DBI;
+use Bloonix::NetAddr;
 use Bloonix::SQL::Creator;
+use NetAddr::IP;
 use Time::ParseDate;
 use Sys::Hostname;
 
@@ -433,6 +435,7 @@ sub get_host_by_auth {
             condition => [
                 "host.id" => $host_id,
                 "host_secret.password" => $password,
+                "host.register" => 0
             ]
         );
     } else {
@@ -440,6 +443,7 @@ sub get_host_by_auth {
             condition => [
                 "host.hostname" => $host_id,
                 "host_secret.password" => $password,
+                "host.register" => 0
             ]
         );
     }
@@ -449,29 +453,12 @@ sub get_host_by_auth {
     );
 
     if ($host) {
-        if ($allow_from) {
-            foreach my $af (@$allow_from) {
-                if ($peeraddr eq $af) {
-                    return $host;
-                }
-            }
-        }
-        # Local connections are generally trusted
-        if ($peeraddr eq "127.0.0.1") {
+        if (
+            $peeraddr eq "127.0.0.1" # Local connections are generally trusted
+            || ($allow_from && Bloonix::NetAddr->ip_in_range($peeraddr, $allow_from))
+            || ($host->{allow_from} && Bloonix::NetAddr->ip_in_range($peeraddr, $host->{allow_from}))
+        ) {
             return $host;
-        }
-        if ($host->{allow_from}) {
-            $host->{allow_from} =~ s/\s//g;
-
-            if ($host->{allow_from} eq "all") {
-                return $host;
-            }
-
-            my @allow = split /,/, $host->{allow_from};
-
-            if (grep /^$peeraddr\z/, @allow) {
-                return $host;
-            }
         }
     }
 

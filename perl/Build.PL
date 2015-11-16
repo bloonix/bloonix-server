@@ -11,7 +11,6 @@ my $build = Module::Build->new(
     requires => {
         "Bloonix::Core" => 0,
         "Bloonix::DBI" => 0,
-        "Bloonix::FCGI" => 0,
         "JSON" => 0,
         "Log::Handler" => 0,
         "Math::BigFloat" => 0,

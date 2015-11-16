@@ -23,10 +23,6 @@ sub main {
             type => Params::Validate::HASHREF,
             default => {}
         },
-        fcgi_server => {
-            type => Params::Validate::HASHREF,
-            optional => 1
-        },
         tcp_server => {
             type => Params::Validate::HASHREF,
             default => {}
@@ -107,14 +103,6 @@ sub main {
         autoflush => 1,
         mode => "append"
     };
-
-    foreach my $key (keys %{$opts{proc_manager}}) {
-        if ($key =~ /^(port|listen)\z/) {
-            $opts{fcgi_server}{$key} = delete $opts{proc_manager}{$key};
-        } elsif ($key eq "server_status") {
-            $opts{server_status}{$key} = delete $opts{proc_manager}{$key};
-        }
-    }
 
     if (!$opts{proc_manager}{lockfile}) {
         $opts{proc_manager}{lockfile} = "/var/lib/bloonix/ipc/server.%P.lock";
@@ -199,9 +187,6 @@ sub server_status {
     }
 
     $opts{allow_from} =~ s/\s//g;
-    $opts{allow_from} = {
-        map { $_, 1 } split(/,/, $opts{allow_from})
-    };
 
     return \%opts;
 }

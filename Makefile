@@ -9,6 +9,7 @@ build:
 	for file in \
 		bin/bloonix-check-for-maintenance \
 		bin/bloonix-count-es-service-documents \
+        bin/bloonix-create-test-hosts \
 		bin/bloonix-delete-es-host-data \
 		bin/bloonix-get-sms-count \
 		bin/bloonix-roll-forward-log \
@@ -64,6 +65,7 @@ install:
 		bloonix-srvchk \
 		bloonix-check-for-maintenance \
 		bloonix-count-es-service-documents \
+        bloonix-create-test-hosts \
 		bloonix-delete-es-host-data \
 		bloonix-get-sms-count \
 		bloonix-roll-forward-log  \
@@ -91,8 +93,8 @@ install:
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-srvchk.service;
 
 	if test -d /usr/lib/systemd/system ; then \
-		./install-sh -c -m 0644 etc/init/bloonix-server.service /usr/lib/systemd/system/; \
-		./install-sh -c -m 0644 etc/init/bloonix-srvchk.service /usr/lib/systemd/system/; \
+		./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
+		./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
 	elif test -d /etc/init.d ; then \
 		./install-sh -c -m 0755 etc/init/bloonix-server $(INITDIR)/bloonix-server; \
 		./install-sh -c -m 0755 etc/init/bloonix-srvchk $(INITDIR)/bloonix-srvchk; \
