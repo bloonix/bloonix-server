@@ -454,8 +454,7 @@ sub get_host_by_auth {
 
     if ($host) {
         if (
-            $peeraddr eq "127.0.0.1" # Local connections are generally trusted
-            || ($allow_from && Bloonix::NetAddr->ip_in_range($peeraddr, $allow_from))
+            ($allow_from && Bloonix::NetAddr->ip_in_range($peeraddr, $allow_from))
             || ($host->{allow_from} && Bloonix::NetAddr->ip_in_range($peeraddr, $host->{allow_from}))
         ) {
             return $host;

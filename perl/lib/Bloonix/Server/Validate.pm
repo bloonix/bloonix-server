@@ -76,7 +76,7 @@ sub main {
         },
         allow_from => {
             type => Params::Validate::SCALAR | Params::Validate::ARRAYREF,
-            default => [ '^127\.0\.0\.1\z' ]
+            default => [ ]
         },
     });
 

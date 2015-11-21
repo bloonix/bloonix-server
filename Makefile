@@ -9,7 +9,7 @@ build:
 	for file in \
 		bin/bloonix-check-for-maintenance \
 		bin/bloonix-count-es-service-documents \
-        bin/bloonix-create-test-hosts \
+		bin/bloonix-create-test-hosts \
 		bin/bloonix-delete-es-host-data \
 		bin/bloonix-get-sms-count \
 		bin/bloonix-roll-forward-log \
@@ -65,7 +65,7 @@ install:
 		bloonix-srvchk \
 		bloonix-check-for-maintenance \
 		bloonix-count-es-service-documents \
-        bloonix-create-test-hosts \
+		bloonix-create-test-hosts \
 		bloonix-delete-es-host-data \
 		bloonix-get-sms-count \
 		bloonix-roll-forward-log  \
@@ -92,7 +92,7 @@ install:
 	./install-sh -c -m 0755 etc/init/bloonix-server.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-server.service;
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-srvchk.service;
 
-	if test -d /usr/lib/systemd/system ; then \
+	if test -d /usr/lib/systemd ; then \
 		./install-sh -d -m 0755 $(DESTDIR)/usr/lib/systemd/system/; \
 		./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
 		./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
@@ -110,6 +110,9 @@ install:
 		fi; \
 		if test ! -e "$(CONFDIR)/bloonix/database/main.conf" ; then \
 			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/database/main.conf $(CONFDIR)/bloonix/database/main.conf; \
+		fi; \
+		if test -d /usr/lib/systemd ; then \
+			systemctl daemon-reload; \
 		fi; \
 	fi;
 
