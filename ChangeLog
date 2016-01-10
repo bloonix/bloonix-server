@@ -1,3 +1,7 @@
+bloonix-server (0.43) released at 2016-01-10
+
+    * Fixed bloonix-get-sms-count.
+
 bloonix-server (0.42) released at 2015-11-15
 
     * Kicked deprecated fcgi support.
