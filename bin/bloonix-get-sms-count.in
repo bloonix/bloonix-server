@@ -90,7 +90,7 @@ my $sth2 = $dbh->prepare(
 );
 
 while (my $row = $sth1->fetchrow_hashref) {
-    $sth2->execute($row->{id}, $from, $to);
+    $sth2->execute($row->{id}, "sms", $from, $to);
     my $count = $sth2->fetchrow_hashref->{count};
     print "$row->{id};$row->{alt_company_id};$count\n";
 }
