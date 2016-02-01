@@ -2252,7 +2252,7 @@ sub send_notifications {
         $self->send_mails;
     }
 
-    if ($self->{notifications}->{sms}) {
+    if ($self->{notifications}->{sms} && $self->sms_enabled) {
         $self->send_sms;
     }
 }

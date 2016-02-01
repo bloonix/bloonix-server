@@ -1,3 +1,7 @@
+bloonix-server (0.44) released at 2016-02-01
+
+    * Fixed: max_sms were ignored of hosts and companies.
+
 bloonix-server (0.43) released at 2016-01-10
 
     * Fixed bloonix-get-sms-count.
