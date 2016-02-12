@@ -1,3 +1,9 @@
+bloonix-server (0.45-1) unstable; urgency=low
+
+    * Improved check of the database schema version.
+
+ -- Jonny Schulz <js@bloonix.de>  Fri, 12 Feb 2016 18:15:28 +0100
+
 bloonix-server (0.44-1) unstable; urgency=low
 
     * Fixed: max_sms were ignored of hosts and companies.

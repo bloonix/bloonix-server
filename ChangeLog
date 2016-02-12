@@ -1,3 +1,7 @@
+bloonix-server (0.45) released at 2016-02-11
+
+    * Improved check of the database schema version.
+
 bloonix-server (0.44) released at 2016-02-01
 
     * Fixed: max_sms were ignored of hosts and companies.

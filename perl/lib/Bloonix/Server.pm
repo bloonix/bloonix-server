@@ -196,6 +196,7 @@ sub pre_process_request {
     $ENV{TZ} = $self->config->{timezone};
     $self->log->set_pattern("%X", "X", $self->peerhost);
     $self->log->set_pattern("%Y", "Y", "n/a");
+    $self->maintenance($self->db->get_maintenance);
     $self->db->reconnect;
     $self->set_time;
 }
@@ -551,7 +552,6 @@ sub process_data {
     $self->get_downtimes;
     $self->host_services($host_services);
     $self->check_host_alive_status($data);
-    $self->maintenance($self->db->get_maintenance);
     $self->max_sms_reached(undef);
     $self->plugin_def(undef);
     $self->plugin_stat(undef);
