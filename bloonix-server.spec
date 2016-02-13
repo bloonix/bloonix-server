@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.45
+Version: 0.46
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sat Feb 13 2016 Jonny Schulz <js@bloonix.de> - 0.46-1
+- Fixed: check maintenance version after the first
+  database connection.
 * Fri Feb 12 2016 Jonny Schulz <js@bloonix.de> - 0.45-1
 - Improved check of the database schema version.
 * Mon Feb 01 2016 Jonny Schulz <js@bloonix.de> - 0.44-1

@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.45";
+our $VERSION = "0.46";
 
 sub run {
     my $class = shift;
@@ -196,8 +196,8 @@ sub pre_process_request {
     $ENV{TZ} = $self->config->{timezone};
     $self->log->set_pattern("%X", "X", $self->peerhost);
     $self->log->set_pattern("%Y", "Y", "n/a");
-    $self->maintenance($self->db->get_maintenance);
     $self->db->reconnect;
+    $self->maintenance($self->db->get_maintenance);
     $self->set_time;
 }
 

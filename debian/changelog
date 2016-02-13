@@ -1,3 +1,10 @@
+bloonix-server (0.46-1) unstable; urgency=low
+
+    * Fixed: check maintenance version after the first
+      database connection.
+
+ -- Jonny Schulz <js@bloonix.de>  Sat, 13 Feb 2016 15:46:25 +0100
+
 bloonix-server (0.45-1) unstable; urgency=low
 
     * Improved check of the database schema version.
