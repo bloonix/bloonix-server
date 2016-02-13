@@ -1,3 +1,8 @@
+bloonix-server (0.46) released at 2016-02-13
+
+    * Fixed: check maintenance version after the first
+      database connection.
+
 bloonix-server (0.45) released at 2016-02-11
 
     * Improved check of the database schema version.
