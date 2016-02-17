@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.46
+Version: 0.47
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Wed Feb 17 2016 Jonny Schulz <js@bloonix.de> - 0.47-1
+- Fixed: retry_interval of services were ignored.
 * Sat Feb 13 2016 Jonny Schulz <js@bloonix.de> - 0.46-1
 - Fixed: check maintenance version after the first
   database connection.

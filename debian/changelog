@@ -1,3 +1,9 @@
+bloonix-server (0.47-1) unstable; urgency=low
+
+    * Fixed: retry_interval of services were ignored.
+
+ -- Jonny Schulz <js@bloonix.de>  Wed, 17 Feb 2016 12:39:46 +0100
+
 bloonix-server (0.46-1) unstable; urgency=low
 
     * Fixed: check maintenance version after the first
