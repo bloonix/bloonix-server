@@ -289,8 +289,8 @@ sub get_active_host_services {
                     next_check next_timeout
                 )],
                 service_parameter => [qw(
-                    agent_id command_options
-                    location_options agent_options host_alive_check
+                    agent_id command_options location_options
+                    agent_options host_alive_check retry_interval
                     interval timeout host_template_id attempt_max
                 )],
                 plugin => [qw(command) ]

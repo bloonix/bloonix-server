@@ -1,3 +1,7 @@
+bloonix-server (0.47) released at 2016-02-17
+
+    * Fixed: retry_interval of services were ignored.
+
 bloonix-server (0.46) released at 2016-02-13
 
     * Fixed: check maintenance version after the first
