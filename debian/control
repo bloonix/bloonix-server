@@ -8,6 +8,6 @@ Homepage: http://www.bloonix.de/
 
 Package: bloonix-server
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}, bloonix-agent, bloonix-core (>= 0.23), bloonix-dbi, libdbi-perl, libdbd-pg-perl, libgetopt-long-descriptive-perl, libmath-bigint-perl, libmime-lite-perl, libnet-openssh-perl, liburi-perl, libtime-modules-perl, libjson-perl, libjson-xs-perl, liblog-handler-perl, libparams-validate-perl, openssl
+Depends: ${shlibs:Depends}, ${misc:Depends}, bloonix-agent, bloonix-core (>= 0.23), bloonix-dbi (>= 0.13), libdbi-perl, libdbd-pg-perl, libgetopt-long-descriptive-perl, libmath-bigint-perl, libmime-lite-perl, libnet-openssh-perl, liburi-perl, libtime-modules-perl, libjson-perl, libjson-xs-perl, liblog-handler-perl, libparams-validate-perl, openssl
 Description: Bloonix server daemon
  bloonix-server provides the bloonix server.

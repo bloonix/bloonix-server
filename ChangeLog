@@ -1,6 +1,8 @@
 bloonix-server (0.47) released at 2016-02-17
 
     * Fixed: retry_interval of services were ignored.
+    * Fixed: update the service status if the agent was dead
+      and the service is a volatile check.
 
 bloonix-server (0.46) released at 2016-02-13
 

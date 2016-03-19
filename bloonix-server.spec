@@ -15,7 +15,7 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 Source0: http://download.bloonix.de/sources/%{name}-%{version}.tar.gz
 Requires: bloonix-agent
 Requires: bloonix-core >= 0.28
-Requires: bloonix-dbi
+Requires: bloonix-dbi >= 0.13
 Requires: openssl
 Requires: perl-JSON-XS
 Requires: perl(DBI)
@@ -162,6 +162,10 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sat Mar 19 2016 Jonny Schulz <js@bloonix.de> - 0.47-1
+- Fixed: retry_interval of services were ignored.
+- Fixed: update the service status if the agent was dead
+  and the service is a volatile check.
 * Wed Feb 17 2016 Jonny Schulz <js@bloonix.de> - 0.47-1
 - Fixed: retry_interval of services were ignored.
 * Sat Feb 13 2016 Jonny Schulz <js@bloonix.de> - 0.46-1
