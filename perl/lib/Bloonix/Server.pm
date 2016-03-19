@@ -1313,6 +1313,9 @@ sub check_volatile_service_status {
             $self->service_status->{volatile_status} = 1;
             $self->service_status->{volatile_since} = $self->etime;
         }
+        if ($self->stat_by_prio->get($self->n_status) >= $self->stat_by_prio->get($self->c_status)) {
+            $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
+        }
     }
 
     # If the volatile_status flag is set and the retain time is not expired
@@ -1329,7 +1332,6 @@ sub check_volatile_service_status {
             $self->service_status->{status} = $self->c_status;
             $self->n_status($self->c_status);
         }
-        $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
     }
 
     if ($self->n_status eq "OK") {
