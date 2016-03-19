@@ -387,7 +387,6 @@ sub get_timed_out_host_services {
     $unistr = substr($unistr, 0, 50);
 
     eval {
-        $self->dbi_lock->autocommit(0);
         $self->dbi_lock->begin;
         $self->dbi_lock->lock("lock_srvchk");
 
@@ -427,15 +426,12 @@ sub get_timed_out_host_services {
         }
 
         $self->dbi_lock->commit;
-        $self->dbi_lock->unlock("lock_srvchk");
-        $self->dbi_lock->autocommit(1);
+        $self->dbi_lock->unlock;
     };
 
     if ($@) {
-        eval {
-            $self->dbi_lock->unlock("srvchk");
-            $self->dbi_lock->autocommit(1);
-        };
+        eval { $self->dbi_lock->rollback };
+        eval { $self->dbi_lock->unlock };
         $self->dbi_lock->disconnect;
         return undef;
     }

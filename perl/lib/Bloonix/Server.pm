@@ -168,6 +168,22 @@ sub process_tcp_request {
     $self->log->info("wait for tcp connection");
     my $client = $self->sipc->accept($timeout) or return;
 
+    # At first set the time! This is very important here! Explantation:
+    # If the bloonix-server sets the time to late, then it's possible
+    # that the poll interval of the agent and the check interval of
+    # the service does not match. See why:
+    #
+    #    16:30:00   The agent connects and send data and wait 60s to poll the next request
+    #    16:30:05   The server takes 5 seconds to process the request and saves last_check with + 5s
+    #    16:31:00   The agent connects and request the service configuration, but the server response
+    #               that no services are ready, because the server saves 16:30:05 as last_check
+    #               and the next check is at 16:31:05.
+    #    16:32:00   The agent connects and services are ready, but unfortunately 2 minutes later.
+    #
+    # To prevent that the server saves a timestamp as last_check where the process time of
+    # the server is added, the time is set immediate if the client connects.
+    $self->set_time;
+
     $self->proc->set_status_reading;
     my $request = $client->recv;
 
@@ -198,7 +214,6 @@ sub pre_process_request {
     $self->log->set_pattern("%Y", "Y", "n/a");
     $self->db->reconnect;
     $self->maintenance($self->db->get_maintenance);
-    $self->set_time;
 }
 
 sub process_request {
@@ -462,6 +477,7 @@ sub process_get_services {
 sub get_services {
     my $self = shift;
     my @services;
+    my $forgiveness = 5;
 
     $self->log->notice(
         "request config for host id", $self->request->{host_id},
@@ -489,12 +505,12 @@ sub get_services {
             $self->log->warning("last_check is higher than current time, ntp issue?");
             push @services, $service;
         } elsif ($service->{status} eq "OK") {
-            if ($service->{last_check} + $service->{interval} <= $self->etime) {
+            if ($service->{last_check} + $service->{interval} - $forgiveness <= $self->etime) {
                 $self->log->info("service $service->{service_id} is ready");
                 push @services, $service;
             }
         } elsif ($service->{attempt_counter} < $service->{attempt_max}) {
-            if ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
+            if ($service->{last_check} + $service->{retry_interval} - $forgiveness <= $self->etime) {
                 $self->log->info(
                     "service $service->{service_id} forced to be ready",
                     "(attempts $counter retry $service->{retry_interval}s)"
@@ -502,14 +518,14 @@ sub get_services {
                 push @services, $service;
             }
         } elsif ($service->{retry_interval} < 60) {
-            if ($service->{last_check} + 60 <= $self->etime) {
+            if ($service->{last_check} + 60 - $forgiveness <= $self->etime) {
                 $self->log->info(
                     "service $service->{service_id} forced to",
                     "be ready (attempts $counter retry 60s fixed)"
                 );
                 push @services, $service;
             }
-        } elsif ($service->{last_check} + $service->{retry_interval} <= $self->etime) {
+        } elsif ($service->{last_check} + $service->{retry_interval} - $forgiveness <= $self->etime) {
             $self->log->info(
                 "service $service->{service_id} forced to be ready",
                 "(attempts $counter retry $service->{retry_interval})"
@@ -746,7 +762,8 @@ sub check_services {
         $self->service_status({
             status => $self->n_service->{status},
             message => $self->n_service->{message},
-            last_check => $self->etime
+            last_check => $self->etime,
+            agent_dead => $self->whoami eq "srvchk" ? 1 : 0
         });
 
         if ($self->c_service->{force_event}) {
@@ -1278,8 +1295,12 @@ sub check_nok_service_status {
 sub check_volatile_service_status {
     my $self = shift;
 
-    # Just some short variables
     my $is_volatile = $self->c_service->{is_volatile}; # is this a volatile status?
+
+    if (!$is_volatile || $self->c_service->{agent_dead}) {
+        return;
+    }
+
     my $volatile_status = $self->c_service->{volatile_status}; # has become the service volatile?
     my $volatile_retain = $self->c_service->{volatile_retain};
     my $volatile_since = $self->c_service->{volatile_since};
@@ -1295,7 +1316,7 @@ sub check_volatile_service_status {
     }
 
     # If the volatile_status flag is set and the retain time is not expired
-    if ($is_volatile && $volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
+    if ($volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
         $self->log->info("unable to set the status to OK because service is in volatile status");
         $self->event_tags->push("volatile");
         $self->service_status->{volatile_status} = 1;
@@ -1583,7 +1604,8 @@ sub check_if_srvchk_remote_error {
     $self->service_status({
         status => "WARNING",
         message => join(" ", "[INTERNAL WARNING - remote agent dead]", $self->n_service->{message}),
-        attempt_counter => 1
+        attempt_counter => 1,
+        agent_dead => 1
     });
 
     if ($self->c_service->{status} ne "WARNING" || $self->force_timed_event) {
