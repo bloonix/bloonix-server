@@ -1,3 +1,10 @@
+bloonix-server (0.48-1) unstable; urgency=low
+
+    * Fixed: update the service status if the agent was dead
+      and the service is a volatile check.
+
+ -- Jonny Schulz <js@bloonix.de>  Sun, 20 Mar 2016 17:15:22 +0100
+
 bloonix-server (0.47-1) unstable; urgency=low
 
     * Fixed: retry_interval of services were ignored.

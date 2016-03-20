@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.47
+Version: 0.48
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sun Mar 20 2016 Jonny Schulz <js@bloonix.de> - 0.48-1
+- Fixed: update the service status if the agent was dead
+  and the service is a volatile check.
 * Sat Mar 19 2016 Jonny Schulz <js@bloonix.de> - 0.47-1
 - Fixed: retry_interval of services were ignored.
 - Fixed: update the service status if the agent was dead
