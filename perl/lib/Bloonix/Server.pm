@@ -1296,52 +1296,31 @@ sub check_volatile_service_status {
     my $self = shift;
 
     my $is_volatile = $self->c_service->{is_volatile}; # is this a volatile status?
+    my $volatile_status = $self->c_service->{volatile_status}; # has become the service volatile?
+    my $volatile_since = $self->c_service->{volatile_since}; # since the service is volatile
 
     if (!$is_volatile || $self->c_service->{agent_dead}) {
         return;
     }
 
-    my $volatile_status = $self->c_service->{volatile_status}; # has become the service volatile?
-    my $volatile_retain = $self->c_service->{volatile_retain};
-    my $volatile_since = $self->c_service->{volatile_since};
-    my $volatile_time = $volatile_retain + $volatile_since;
-
-    # If the status is not OK and if the volatile_status flag is not set
-    if ($self->n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
-        if ($is_volatile && !$volatile_status) {
-            $self->log->info("set service in volatile status since", $self->etime);
-            $self->service_status->{volatile_status} = 1;
-            $self->service_status->{volatile_since} = $self->etime;
-        }
+    if ($volatile_status) {
         if ($self->stat_by_prio->get($self->n_status) >= $self->stat_by_prio->get($self->c_status)) {
+            # Update the status if the new status is higher than the old status
             $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
-        }
-    }
-
-    # If the volatile_status flag is set and the retain time is not expired
-    if ($volatile_status && ($volatile_retain == 0 || $volatile_time > $self->etime)) {
-        $self->log->info("unable to set the status to OK because service is in volatile status");
-        $self->event_tags->push("volatile");
-        $self->service_status->{volatile_status} = 1;
-    }
-
-    # Manipulate the volatile status because the status must be hold
-    if ($self->service_status->{volatile_status}) {
-        if ($self->stat_by_prio->get($self->n_status) < $self->stat_by_prio->get($self->c_status)) {
-            $self->log->info("overwrite service status from", $self->n_status, "to volatile status", $self->c_status);
-            $self->service_status->{status} = $self->c_status;
+        } else {
+            # Overwrite the new status and message.
             $self->n_status($self->c_status);
+            $self->service_status->{status} = $self->c_status;
+            $self->service_status->{message} = join(" ",
+                "[VOLATILE] please look into the events to get further",
+                "information why this service was in status", $self->c_status
+            );
         }
-    }
-
-    if ($self->n_status eq "OK") {
-        if ($volatile_status) {
-            $self->service_status->{volatile_status} = 0;
-        }
-
-        if ($volatile_since) {
-            $self->service_status->{volatile_since} = 0;
-        }
+    } elsif ($self->n_status =~ /^(?:WARNING|CRITICAL|UNKNOWN)\z/) {
+        $self->log->info("set service in volatile status since", $self->etime);
+        $self->service_status->{volatile_status} = 1;
+        $self->service_status->{volatile_since} = $self->etime;
+        $self->service_status->{message} = sprintf("[VOLATILE] %s", $self->service_status->{message});
     }
 }
 
