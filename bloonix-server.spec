@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.48
+Version: 0.49
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Fri Mar 25 2016 Jonny Schulz <js@bloonix.de> - 0.49-1
+- bloonix-update-agent-host-config: added options 'test' and 'when'.
 * Sun Mar 20 2016 Jonny Schulz <js@bloonix.de> - 0.48-1
 - Fixed: update the service status if the agent was dead
   and the service is a volatile check.
