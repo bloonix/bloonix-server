@@ -57,31 +57,40 @@ sub get_argv {
     my $o_config = "@@CONFDIR@@/bloonix/server/main.conf";
     my $o_agent_id = "localhost";
     my $o_run = 0;
+    my $o_test = 1;
     my $o_addr = 0;
+    my $o_when = 0;
     my $o_help = 0;
 
     GetOptions(
         "c|config=s" => \$o_config,
         "r|run" => \$o_run,
+        "t|test" => \$o_test,
         "h|help" => \$o_help,
         "a|addr=s" => \$o_addr,
+        "w|when=s" => \$o_when,
         "A|agent-id=s" => \$o_agent_id
     ) or exit 1;
 
-    if ($o_help || !$o_run) {
+    if ($o_help || (!$o_run && !$o_test)) {
         print "\n";
         print "Usage: $progname [ OPTIONS ]\n\n";
+        print "Use --run or --test to start the program\n\n";
         print "Options:\n\n";
         print "-c, --config <file>\n";
         print "    The configruation file.\n";
         print "    Default: /etc/bloonix/server/main.conf\n";
         print "-r, --run\n";
         print "    Update the configuration.\n";
+        print "-t, --test\n";
+        print "    Don't update the configuration. Just run a test.\n";
         print "-a, --addr <ipaddr>\n";
         print "    The address of the bloonix agent. Set 'localhost'\n";
         print "    if the agent runs on the same machine as the bloonix server.\n";
         print "-A, --agent-id <localhost|intranet|remote>\n";
         print "    The agent ID to load.\n";
+        print "-w, --when\n";
+        print "    Set pararamter 'when' to each host\n";
         print "-h, --help\n";
         print "    Print the help.\n";
         print "\n";
@@ -98,8 +107,10 @@ sub get_argv {
         exit 1;
     }
 
+    $self->{test} = $o_test;
     $self->{config_file} = $o_config;
     $self->{addr} = $o_addr;
+    $self->{when} = $o_when;
     $self->{agent_id} = $o_agent_id;
 }
 
@@ -286,6 +297,16 @@ sub get_hosts {
     $self->disconnect_database;
 }
 
+sub write {
+    my ($self, $fh, $data) = @_;
+
+    print $fh $data;
+
+    if ($self->{test}) {
+        print $data;
+    }
+}
+
 sub update_hosts {
     my $self = shift;
     my $ipaddr = $self->{addr};
@@ -297,16 +318,21 @@ sub update_hosts {
         $host->{active} = $host->{active} ? "yes" : "no";
         my $agent_id = join(".", split(/,/, $self->{agent_id}));
 
-        print $fh join("",
-            "host {\n",
-            "    host_id  $host->{id}.$agent_id\n",
-            "    password $host->{password}\n",
-            "    agent_id $self->{agent_id}\n",
-            "}\n",
-        );
+        $self->write($fh, "host {\n");
+        $self->write($fh, "    host_id $host->{id}.$agent_id\n");
+        $self->write($fh, "    password $host->{password}\n");
+        $self->write($fh, "    agent_id $self->{agent_id}\n");
+        if ($self->{when}) {
+            $self->write($fh, "    when $self->{when}\n");
+        }
+        $self->write($fh, "}\n");
     }
 
     close $fh;
+
+    if ($self->{test}) {
+        return;
+    }
 
     $self->log->notice("rewrite hosts config");
 
