@@ -11,7 +11,6 @@ export DH_VERBOSE=1
 
 PERL ?= /usr/bin/perl
 BUILDROOT=$(CURDIR)/debian/bloonix-server
-WITH_SYSTEMD=0
 
 configure: configure-stamp
 configure-stamp:
@@ -46,14 +45,6 @@ install: build
 		$(MAKE) install DESTDIR=$(BUILDROOT)
 
 		cd perl && $(PERL) Build install destdir=$(BUILDROOT) create_packlist=0
-
-		if test "$(WITH_SYSTEMD)" -eq 1 ; then \
-			install -p -D -m 0644 etc/init/bloonix-server.service $(BUILDROOT)/usr/lib/systemd/system/bloonix-server.service; \
-			install -p -D -m 0644 etc/init/bloonix-srvchk.service $(BUILDROOT)/usr/lib/systemd/system/bloonix-srvchk.service; \
-		else \
-			install -p -D -m 0755 etc/init/bloonix-server $(BUILDROOT)/etc/init.d/bloonix-server; \
-			install -p -D -m 0755 etc/init/bloonix-srvchk $(BUILDROOT)/etc/init.d/bloonix-srvchk; \
-		fi;
 
 # Build architecture-independent files here.
 binary-indep: build install

@@ -43,7 +43,8 @@ my @customer = @ARGV;
 
 foreach my $p ($from, $to) {
     if (!$p || $p !~ /^\d\d\d\d-\d\d-\d\d\z/) {
-        print "Invalid from/to format!\n";
+        print "Usage: $0 [ from ] [ to ]\n\n";
+        print "Example: $0 2015-03-01 2015-03-31\n";
         exit 0;
     }
 }

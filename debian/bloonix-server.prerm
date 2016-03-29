@@ -2,29 +2,28 @@
 
 set -e
 
-WITH_SYSTEMD=0
+if [ "$1" = "remove" ] ; then
+    echo "Removing bloonix-server and bloonix-srvchk.."
 
-__remove() {
-    if [ $WITH_SYSTEMD -eq 1 ] ; then
-        echo "Removing bloonix-server.."
+    if [ -e "/lib/systemd" ] ; then
         systemctl --no-reload disable bloonix-srvchk.service
         systemctl --no-reload disable bloonix-server.service
-        echo "Stopping (force) bloonix-server.."
+        echo "Stopping bloonix-server and bloonix-srvchk.."
         systemctl stop bloonix-srvchk.service
         systemctl stop bloonix-server.service
         systemctl daemon-reload
     else
-        echo "Removing bloonix-server.."
         update-rc.d -f bloonix-srvchk remove >/dev/null
         update-rc.d -f bloonix-server remove >/dev/null
-        echo "Stopping (force) bloonix-server.."
-        /etc/init.d/bloonix-srvchk stop
-        /etc/init.d/bloonix-server stop
+        echo "Stopping bloonix-server and bloonix-srvchk.."
+        if [ -e "/usr/share/upstart" ] ; then
+            service bloonix-srvchk stop
+            service bloonix-server stop
+        else
+            /etc/init.d/bloonix-srvchk stop
+            /etc/init.d/bloonix-server stop
+        fi
     fi
-}
-
-case "$1" in
-    remove) __remove ;;
-esac
+fi
 
 exit 0

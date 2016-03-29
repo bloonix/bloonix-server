@@ -58,3 +58,7 @@ if [ -e '/@@LIBDIR@@/bloonix/server' ] ; then
     rmdir '/@@LIBDIR@@/bloonix'
     rmdir '/@@LIBDIR@@'
 fi
+
+chown bloonix /var/log/bloonix /var/run/bloonix
+chmod 750 /var/log/bloonix
+chmod 755 /var/run/bloonix

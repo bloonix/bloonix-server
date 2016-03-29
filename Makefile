@@ -33,8 +33,7 @@ build:
 		sed -i "s!@@LOGDIR@@!$(LOGDIR)!g" $$file; \
 	done;
 
-	# Perl
-	if test "$(WITHOUT_PERL)" = "0" ; then \
+	if test "$(BUILDPKG)" = "0" ; then \
 		set -e; cd perl; \
 		$(PERL) Build.PL installdirs=$(PERL_INSTALLDIRS); \
 		$(PERL) Build; \
@@ -42,21 +41,18 @@ build:
 
 test:
 
-	if test "$(WITHOUT_PERL)" = "0" ; then \
+	if test "$(BUILDPKG)" = "0" ; then \
 		set -e; cd perl; \
 		$(PERL) Build test; \
 	fi;
 
 install:
 
-	# Base Bloonix directories
-	for d in $(CACHEDIR) $(LOGDIR) $(RUNDIR) ; do \
-		./install-sh -d -m 0750 -o $(USERNAME) -g $(GROUPNAME) $$d/bloonix; \
+	for d in $(LOGDIR) $(RUNDIR) ; do \
+		./install-sh -d -m 0750 $$d/bloonix; \
 	done;
 
 	./install-sh -d -m 0755 $(PREFIX)/bin;
-	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix;
-	./install-sh -d -m 0755 -o root -g $(GROUPNAME) $(SRVDIR)/bloonix/server;
 	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix;
 	./install-sh -d -m 0755 -o root -g root $(CONFDIR)/bloonix/server;
 
@@ -92,38 +88,22 @@ install:
 	./install-sh -c -m 0755 etc/init/bloonix-server.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-server.service;
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-srvchk.service;
 
-	if test -d /usr/lib/systemd ; then \
-		./install-sh -d -m 0755 $(DESTDIR)/usr/lib/systemd/system/; \
-		./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
-		./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
-	elif test -d /etc/init.d ; then \
-		./install-sh -c -m 0755 etc/init/bloonix-server $(INITDIR)/bloonix-server; \
-		./install-sh -c -m 0755 etc/init/bloonix-srvchk $(INITDIR)/bloonix-srvchk; \
-	fi;
-
 	if test "$(BUILDPKG)" = "0" ; then \
-		if test ! -e "$(CONFDIR)/bloonix/server/main.conf" ; then \
-			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/server/main.conf $(CONFDIR)/bloonix/server/main.conf; \
-		fi; \
-		if test ! -e "$(CONFDIR)/bloonix/srvchk/main.conf" ; then \
-			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/srvchk/main.conf $(CONFDIR)/bloonix/srvchk/main.conf; \
-		fi; \
-		if test ! -e "$(CONFDIR)/bloonix/database/main.conf" ; then \
-			./install-sh -c -m 0640 -o root -g $(GROUPNAME) etc/bloonix/database/main.conf $(CONFDIR)/bloonix/database/main.conf; \
-		fi; \
 		if test -d /usr/lib/systemd ; then \
+			./install-sh -d -m 0755 $(DESTDIR)/usr/lib/systemd/system/; \
+			./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
+			./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
 			systemctl daemon-reload; \
+		elif test -d /etc/init.d ; then \
+			./install-sh -c -m 0755 etc/init/bloonix-server $(INITDIR)/bloonix-server; \
+			./install-sh -c -m 0755 etc/init/bloonix-srvchk $(INITDIR)/bloonix-srvchk; \
 		fi; \
-	fi;
-
-	# Install the Bloonix server perl modules
-	if test "$(WITHOUT_PERL)" = "0" ; then \
 		set -e; cd perl; $(PERL) Build install; $(PERL) Build realclean; \
 	fi;
 
 clean:
 
-	if test "$(WITHOUT_PERL)" = "0" ; then \
+	if test "$(BUILDPKG)" = "0" ; then \
 		cd perl; \
 		if test -e "Makefile" ; then \
 			$(PERL) Build clean; \

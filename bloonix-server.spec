@@ -62,7 +62,7 @@ rm -rf %{buildroot}
 %{__make} install DESTDIR=%{buildroot}
 mkdir -p ${RPM_BUILD_ROOT}%{docdir}
 install -d -m 0750 ${RPM_BUILD_ROOT}%{logdir}
-install -d -m 0750 ${RPM_BUILD_ROOT}%{rundir}
+install -d -m 0755 ${RPM_BUILD_ROOT}%{rundir}
 install -c -m 0444 LICENSE ${RPM_BUILD_ROOT}%{docdir}/
 install -c -m 0444 ChangeLog ${RPM_BUILD_ROOT}%{docdir}/
 
@@ -130,8 +130,8 @@ rm -rf %{buildroot}
 %dir %attr(0755, root, root) %{blxdir}/etc/init.d
 %{blxdir}/etc/init.d/bloonix-server
 %{blxdir}/etc/init.d/bloonix-srvchk
-%dir %attr(0750, bloonix, bloonix) %{logdir}
-%dir %attr(0750, bloonix, bloonix) %{rundir}
+%dir %attr(0750, bloonix, root) %{logdir}
+%dir %attr(0755, bloonix, root) %{rundir}
 
 %{_bindir}/bloonix-server
 %{_bindir}/bloonix-srvchk
@@ -162,8 +162,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
-* Fri Mar 25 2016 Jonny Schulz <js@bloonix.de> - 0.49-1
+* Mon Mar 28 2016 Jonny Schulz <js@bloonix.de> - 0.49-1
 - bloonix-update-agent-host-config: added options 'test' and 'when'.
+- Fixed systemd/sysvinit/upstart installation routines.
 * Sun Mar 20 2016 Jonny Schulz <js@bloonix.de> - 0.48-1
 - Fixed: update the service status if the agent was dead
   and the service is a volatile check.

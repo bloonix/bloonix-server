@@ -57,7 +57,7 @@ sub get_argv {
     my $o_config = "@@CONFDIR@@/bloonix/server/main.conf";
     my $o_agent_id = "localhost";
     my $o_run = 0;
-    my $o_test = 1;
+    my $o_test = 0;
     my $o_addr = 0;
     my $o_when = 0;
     my $o_help = 0;
