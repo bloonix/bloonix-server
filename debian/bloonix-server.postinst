@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ -e "/lib/systemd" ] ; then
+if [ -e "/usr/lib/systemd" ] ; then
     cp -a /usr/lib/bloonix/etc/systemd/bloonix-server.service /lib/systemd/system/bloonix-server.service
     cp -a /usr/lib/bloonix/etc/systemd/bloonix-srvchk.service /lib/systemd/system/bloonix-srvchk.service
     systemctl daemon-reload
@@ -10,7 +10,7 @@ else
 fi
 
 if [ "$1" = "configure" ] ; then
-    if [ -e "/lib/systemd" ] ; then
+    if [ -e "/usr/lib/systemd" ] ; then
         echo "Configure bloonix with systemd"
         systemctl preset bloonix-srvchk.service
         systemctl preset bloonix-server.service
@@ -25,7 +25,7 @@ fi
 
 echo "Starting (condrestart) bloonix-server..";
 
-if [ -e "/lib/systemd" ] ; then
+if [ -e "/usr/lib/systemd" ] ; then
     systemctl condrestart bloonix-server.service
 elif [ -e "/usr/share/upstart" ] ; then
     service bloonix-server condrestart
@@ -35,7 +35,7 @@ fi
 
 echo "Starting (condrestart) bloonix-srvchk..";
 
-if [ -e "/lib/systemd" ] ; then
+if [ -e "/usr/lib/systemd" ] ; then
     systemctl condrestart bloonix-srvchk.service
 elif [ -e "/usr/share/upstart" ] ; then
     service bloonix-srvchk condrestart

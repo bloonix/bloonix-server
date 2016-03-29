@@ -5,7 +5,7 @@ set -e
 if [ "$1" = "remove" ] ; then
     echo "Removing bloonix-server and bloonix-srvchk.."
 
-    if [ -e "/lib/systemd" ] ; then
+    if [ -e "/usr/lib/systemd" ] ; then
         systemctl --no-reload disable bloonix-srvchk.service
         systemctl --no-reload disable bloonix-server.service
         echo "Stopping bloonix-server and bloonix-srvchk.."

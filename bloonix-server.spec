@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.49
+Version: 0.50
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Tue Mar 29 2016 Jonny Schulz <js@bloonix.de> - 0.50-1
+- Fixed systemctl errors.
 * Mon Mar 28 2016 Jonny Schulz <js@bloonix.de> - 0.49-1
 - bloonix-update-agent-host-config: added options 'test' and 'when'.
 - Fixed systemd/sysvinit/upstart installation routines.
