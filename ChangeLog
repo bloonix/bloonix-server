@@ -1,3 +1,7 @@
+bloonix-server (0.51) released at 2016-03-31
+
+    * Implemented support for Elasticsearch index aliases.
+
 bloonix-server (0.50) released at 2016-03-29
 
     * Fixed systemctl errors.

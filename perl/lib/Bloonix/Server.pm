@@ -2643,12 +2643,25 @@ sub get_indices {
 
     my $result = $self->rest->get(path => "_aliases");
     my @indices;
+    my %indices;
+
+    foreach my $index (keys %$result) {
+        if ($index =~ /^bloonix\-(\d\d\d\d)\-(\d\d)\z/) {
+            $indices{$index} = undef;
+        } elsif ($result->{$index}->{aliases}) {
+            foreach my $index (keys %{$result->{$index}->{aliases}}) {
+                if ($index =~ /^bloonix\-(\d\d\d\d)\-(\d\d)\z/) {
+                    $indices{$index} = undef;
+                }
+            }
+        }
+    }
 
     if ($from && $to) {
         my $from_time = $self->get_year_month($from);
         my $to_time = $self->get_year_month($to);
 
-        foreach my $index (sort keys %$result) {
+        foreach my $index (sort keys %indices) {
             if ($index =~ /^bloonix\-(\d\d\d\d)\-(\d\d)\z/) {
                 my $index_time = "$1$2";
 
@@ -2658,7 +2671,7 @@ sub get_indices {
             }
         }
     }  else {
-        @indices = sort keys %$result;
+        @indices = sort keys %indices;
     }
 
     return wantarray ? @indices : \@indices;

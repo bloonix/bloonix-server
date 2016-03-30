@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.50
+Version: 0.51
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Thu Mar 31 2016 Jonny Schulz <js@bloonix.de> - 0.51-1
+- Implemented support for Elasticsearch index aliases.
 * Tue Mar 29 2016 Jonny Schulz <js@bloonix.de> - 0.50-1
 - Fixed systemctl errors.
 * Mon Mar 28 2016 Jonny Schulz <js@bloonix.de> - 0.49-1
