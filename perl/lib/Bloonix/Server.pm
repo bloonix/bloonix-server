@@ -398,8 +398,6 @@ sub process_get_services {
             }
 
             $service->{command_options} =~ s/%RND\(([1-9][0-9]{0,2})\)%/$self->pwgen($1)/eg;
-            $self->log->notice("XXX", $service->{command_options});
-
             $service->{command_options} = $self->json->decode($service->{command_options});
             $service->{agent_options} = $self->json->decode($service->{agent_options});
 
