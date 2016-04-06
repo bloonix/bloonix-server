@@ -45,17 +45,40 @@ if ($i) {
     while (<$in>) { last if ++$x == $i }
 }
 
+my @bulkdata;
+my @jsondata;
+
 while (my $line = <$in>) {
     $i++; print "processing line $i\r";
+    push @jsondata, $line;
+
     my $req = $json->decode($line);
-    #&typecast($req->{data});
-    if (!$rest->post(%$req)) {
+    my $data = $req->{data};
+    my $path = $req->{path};
+
+    if ($path =~ m!^(bloonix-\d\d\d\d-\d\d)/(.+?)/\?routing=(\d+)!) {
+        push @bulkdata, $json->encode({ index => { "_index" => $1, "_type" => $2, "_routing" => $3 }});
+        push @bulkdata, $json->encode($data);
+        if (@bulkdata >= 20000) {
+            if (!$rest->post(path => "/_bulk", data => join("\n", @bulkdata))) {
+                print $out join("", @jsondata);
+                print $rest->errstr;
+            }
+            @bulkdata = ();
+            @jsondata = ();
+        }
+    } else {
         print $out $line;
-        $out->sync;
     }
+
     seek($cnt, 0, 0);
     print $cnt $i;
-    $cnt->sync;
+}
+
+if (@bulkdata) {
+    if (!$rest->post(path => "/_bulk", data => join("\n", @bulkdata))) {
+        print $out join("", @jsondata);
+    }
 }
 
 print "\n";
@@ -65,17 +88,3 @@ close $cnt;
 
 unlink "$trlog.import.count";
 unlink "$trlog.import";
-
-sub typecast {
-    my $data = shift;
-
-    if (ref $data eq "HASH") {
-        foreach my $key (keys %$data) {
-            if (ref $data->{$key} eq "HASH") {
-                &typecast($data->{$key});
-            } elsif (defined $data->{$key} && $data->{$key} =~ /^\d+(\.\d+){0,1}\z/) {
-                $data->{$key} += 0;
-            }
-        }
-    }
-}

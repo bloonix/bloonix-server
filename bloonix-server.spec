@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.51
+Version: 0.53
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,11 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Wed Apr 06 2016 Jonny Schulz <js@bloonix.de> - 0.53-1
+- Implement global var %RND(num)% for command options.
+* Mon Apr 04 2016 Jonny Schulz <js@bloonix.de> - 0.52-1
+- Check /bin/systemctl instead of /usr/lib/systemd to
+  determine if systemd is used.
 * Thu Mar 31 2016 Jonny Schulz <js@bloonix.de> - 0.51-1
 - Implemented support for Elasticsearch index aliases.
 * Tue Mar 29 2016 Jonny Schulz <js@bloonix.de> - 0.50-1

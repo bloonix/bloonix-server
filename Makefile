@@ -89,7 +89,7 @@ install:
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-srvchk.service;
 
 	if test "$(BUILDPKG)" = "0" ; then \
-		if test -d /usr/lib/systemd ; then \
+		if test -e /bin/systemctl || test -e /usr/bin/systemctl ; then \
 			./install-sh -d -m 0755 $(DESTDIR)/usr/lib/systemd/system/; \
 			./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
 			./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \

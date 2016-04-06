@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.51";
+our $VERSION = "0.53";
 
 sub run {
     my $class = shift;
@@ -397,6 +397,7 @@ sub process_get_services {
                 }
             }
 
+            $service->{command_options} =~ s/%RND\(([1-9][0-9]{0,2})\)%/$self->pwgen($1)/eg;
             $service->{command_options} = $self->json->decode($service->{command_options});
             $service->{agent_options} = $self->json->decode($service->{agent_options});
 

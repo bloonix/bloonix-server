@@ -1,3 +1,12 @@
+bloonix-server (0.53) released at 2016-04-06
+
+    * Implement global var %RND(num)% for command options.
+
+bloonix-server (0.52) released at 2016-04-04
+
+    * Check /bin/systemctl instead of /usr/lib/systemd to
+      determine if systemd is used.
+
 bloonix-server (0.51) released at 2016-03-31
 
     * Implemented support for Elasticsearch index aliases.

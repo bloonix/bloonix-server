@@ -1,3 +1,16 @@
+bloonix-server (0.53-1) unstable; urgency=low
+
+    * Implement global var %RND(num)% for command options.
+
+ -- Jonny Schulz <js@bloonix.de>  Wed, 06 Apr 2016 17:52:47 +0200
+
+bloonix-server (0.52-1) unstable; urgency=low
+
+    * Check /bin/systemctl instead of /usr/lib/systemd to
+      determine if systemd is used.
+
+ -- Jonny Schulz <js@bloonix.de>  Mon, 04 Apr 2016 01:35:14 +0200
+
 bloonix-server (0.51-1) unstable; urgency=low
 
     * Implemented support for Elasticsearch index aliases.
