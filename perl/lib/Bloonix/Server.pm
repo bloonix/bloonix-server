@@ -398,6 +398,8 @@ sub process_get_services {
             }
 
             $service->{command_options} =~ s/%RND\(([1-9][0-9]{0,2})\)%/$self->pwgen($1)/eg;
+            $self->log->notice("XXX", $service->{command_options});
+
             $service->{command_options} = $self->json->decode($service->{command_options});
             $service->{agent_options} = $self->json->decode($service->{agent_options});
 
@@ -2769,6 +2771,22 @@ sub ip_in_range {
     };
 
     return $ret;
+}
+
+sub pwgen {
+    my ($self, $num) = @_;
+    $num ||= 30;
+
+    my @char = ("a".."z", "A".."Z", 0..9);
+    my $len = scalar @char;
+    my $str = "";
+
+    for my $i (1..$num) {
+        my $n = int(rand($len));
+        $str .= $char[$n];
+    }
+
+    return $str;
 }
 
 1;
