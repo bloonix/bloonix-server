@@ -1,3 +1,10 @@
+bloonix-server (0.54) released at 2016-04-08
+
+    * Fixed last_check setting for checks that have a scheduled
+      downtime.
+    * Now only services are pushed to the agents if the host or
+      service has no scheduled downtime configured.
+
 bloonix-server (0.53) released at 2016-04-06
 
     * Implement global var %RND(num)% for command options.

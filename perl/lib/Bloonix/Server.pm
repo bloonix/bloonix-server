@@ -35,7 +35,7 @@ __PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.53";
+our $VERSION = "0.54";
 
 sub run {
     my $class = shift;
@@ -485,6 +485,15 @@ sub get_services {
         "agent id", $self->request->{agent_id}
     );
 
+    $self->host_downtime(undef);
+    $self->service_downtime(undef);
+    $self->get_downtimes;
+
+    if ($self->host_downtime) {
+        $self->log->notice("host", $self->host->{id}, "has a scheduled downtime");
+        return [];
+    }
+
     my $services = $self->db->get_active_host_services(
         $self->request->{host_id},
         $self->request->{agent_id}
@@ -498,7 +507,9 @@ sub get_services {
         $service->{interval} ||= $self->host->{interval};
         $service->{timeout} ||= $self->host->{timeout};
 
-        if ($service->{force_check}) {
+        if ($self->service_downtime->{$service->{service_id}}) {
+            $self->log->notice("service $service->{service_id} has a scheduled downtime");
+        } elsif ($service->{force_check}) {
             $self->log->info("service $service->{service_id} check forced");
             $self->db->update_force_check($service->{service_id}, 0);
             push @services, $service;
@@ -1497,7 +1508,8 @@ sub check_if_downtime_is_active {
         status => "INFO",
         message => join(" ", $message, $self->n_service->{message}),
         attempt_counter => 1,
-        scheduled => 1
+        scheduled => 1,
+        last_check => $self->etime
     });
 
     if ($self->n_service->{status} eq "OK" && $self->c_service->{status_dependency_matched} > 0) {

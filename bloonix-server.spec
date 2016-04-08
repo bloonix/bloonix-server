@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.53
+Version: 0.54
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,11 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Fri Apr 08 2016 Jonny Schulz <js@bloonix.de> - 0.54-1
+- Fixed last_check setting for checks that have a scheduled
+  downtime.
+- Now only services are pushed to the agents if the host or
+  service has no scheduled downtime configured.
 * Wed Apr 06 2016 Jonny Schulz <js@bloonix.de> - 0.53-1
 - Implement global var %RND(num)% for command options.
 * Mon Apr 04 2016 Jonny Schulz <js@bloonix.de> - 0.52-1

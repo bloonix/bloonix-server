@@ -1,3 +1,12 @@
+bloonix-server (0.54-1) unstable; urgency=low
+
+    * Fixed last_check setting for checks that have a scheduled
+      downtime.
+    * Now only services are pushed to the agents if the host or
+      service has no scheduled downtime configured.
+
+ -- Jonny Schulz <js@bloonix.de>  Fri, 08 Apr 2016 18:22:14 +0200
+
 bloonix-server (0.53-1) unstable; urgency=low
 
     * Implement global var %RND(num)% for command options.
