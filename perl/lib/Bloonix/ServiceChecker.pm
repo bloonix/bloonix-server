@@ -382,10 +382,6 @@ sub get_timed_out_host_services {
     my $time = time;
     my $services;
 
-    # This string should be unique.
-    my $unistr = join(".", $$, $self->update(1), Sys::Hostname::hostname);
-    $unistr = substr($unistr, 0, 50);
-
     eval {
         $self->dbi_lock->begin;
         $self->dbi_lock->lock("lock_srvchk");
@@ -401,7 +397,7 @@ sub get_timed_out_host_services {
 
         if ($service) {
             $services = $self->dbi->fetch(qq{
-                select id, host_id
+                select id, host_id, next_timeout
                 from service
                 where host_id = ?
                 and next_timeout <= ?
@@ -412,12 +408,12 @@ sub get_timed_out_host_services {
                 my $service_ids = [ map { $_->{id} } @$services ];
 
                 $self->dbi->do(
+                    # Prevent the service checker to run in a endless loop
+                    # if the bloonix-server is down and force next timeout
+                    # to time + 60 seconds and try again after 60 seconds.
+                    # The bloonix server will reset next timeout if it's alive.
                     $self->sql->update(
                         table => "service",
-                        # Force next timeout to time + 60 seconds and try
-                        # again after 60 seconds if the bloonix server is
-                        # dead. The bloonix server will set the next timeout
-                        # to time + 300 seconds.
                         data => { next_timeout => $time + 60 },
                         condition => [ id => $service_ids ]
                     )

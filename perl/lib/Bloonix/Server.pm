@@ -25,17 +25,19 @@ use Bloonix::Timeperiod;
 use Bloonix::REST;
 
 use base qw/Bloonix::Accessor/;
-__PACKAGE__->mk_accessors(qw/config log tlog ipc db done rest json proc proc_helper sipc client peerhost select/);
-__PACKAGE__->mk_accessors(qw/host_services host_downtime service_downtime dependencies service_has_active_dependency/);
-__PACKAGE__->mk_accessors(qw/host stime etime mtime company request host_down whoami runtime max_sms_reached sms_enabled/);
-__PACKAGE__->mk_accessors(qw/force_timed_event es_index maintenance locations plugin plugin_def plugin_stat/);
-__PACKAGE__->mk_accessors(qw/service_status service_status_duration service_id c_service n_service c_status n_status service_interval service_timeout/);
-__PACKAGE__->mk_accessors(qw/min_smallint max_smallint min_int max_int min_bigint max_bigint/);
-__PACKAGE__->mk_accessors(qw/min_m_float max_m_float min_p_float max_p_float/);
+__PACKAGE__->mk_accessors(qw/
+    config log tlog ipc db done rest json proc proc_helper sipc client peerhost select
+    host_services host_downtime service_downtime dependencies service_has_active_dependency
+    host stime etime mtime company request host_down whoami runtime max_sms_reached sms_enabled
+    force_timed_event es_index maintenance locations plugin plugin_def plugin_stat
+    service_status service_status_duration service_id c_service n_service c_status n_status
+    service_interval service_timeout min_smallint max_smallint min_int max_int min_bigint max_bigint
+    min_m_float max_m_float min_p_float max_p_float set_host_last_check
+/);
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.54";
+our $VERSION = "0.55";
 
 sub run {
     my $class = shift;
@@ -583,6 +585,7 @@ sub process_data {
     $self->max_sms_reached(undef);
     $self->plugin_def(undef);
     $self->plugin_stat(undef);
+    $self->set_host_last_check(undef);
 
     # Validate, check and store the service data
     $self->validate_data($data) or return undef;
@@ -774,9 +777,14 @@ sub check_services {
         $self->service_status({
             status => $self->n_service->{status},
             message => $self->n_service->{message},
-            last_check => $self->etime,
-            agent_dead => $self->whoami eq "srvchk" ? 1 : 0
         });
+
+        if ($self->whoami eq "srvchk") {
+            $self->service_status->{agent_dead} = 1;
+        } else {
+            $self->service_status->{agent_dead} = 0;
+            $self->service_status->{last_check} = $self->etime;
+        }
 
         if ($self->c_service->{force_event}) {
             $self->service_status->{force_event} = 0;
@@ -795,6 +803,11 @@ sub check_services {
             || $self->check_if_host_or_service_not_active
             || $self->check_if_downtime_is_active
             || $self->check_if_srvchk_remote_error;
+
+        if ($self->whoami ne "srvchk") {
+            # set last check only if no downtime exists
+            $self->set_host_last_check(1);
+        }
 
         if ($self->n_service->{tags} && $self->n_service->{tags} =~ /^\w+(,\w+){0,}\z/) {
             $self->event_tags->push(split /,/, $self->n_service->{tags});
@@ -898,7 +911,9 @@ sub check_notification_interval {
 
     # last_notification_1 is the timestamps when the last notification was send.
     # last_notification_2 is the same but will be set back to 0 if the status of the service is ok.
-    my $notification_interval = $self->c_service->{notification_interval} ? $self->c_service->{notification_interval} : $self->host->{notification_interval};
+    my $notification_interval = $self->c_service->{notification_interval}
+        ? $self->c_service->{notification_interval}
+        : $self->host->{notification_interval};
     my $next_notification1 = $self->c_service->{last_notification_1} + $notification_interval;
     my $next_notification2 = $self->c_service->{last_notification_2} + $notification_interval;
 
@@ -910,7 +925,9 @@ sub check_notification_interval {
     );
 
     if ($self->service_status->{flapping} && $next_notification1 > $self->etime) {
-        $self->log->notice("no notification send - service is flapping - next notification $next_notification1");
+        $self->log->notice(
+            "no notification send - service is flapping - next notification $next_notification1"
+        );
         return 1;
     }
 
@@ -956,8 +973,8 @@ sub set_service_next_check {
     # If srvchk reports an critical status then all contacts
     # are notified immediate. For this reason it's not necessary
     # to the next timeout too early. The next timeout is forced
-    # to 300 seconds because the lowest escalation time of the
-    # contacts is 300 seconds. Next check remains untouched!
+    # to 600 seconds because the lowest escalation time of the
+    # contacts is 600 seconds. Next check remains untouched!
     $self->service_status->{next_timeout} = $interval + $timeout > 600
         ? $self->etime + 600
         : $self->etime + $interval + $timeout;
@@ -1101,7 +1118,9 @@ sub check_if_service_has_a_active_dependency {
     # At first it will be checked if the service or host
     # has a dependency and if the dependency is in any
     # status that no notification must be send.
-    if ($self->n_status ne "OK" && $self->dependency_is_in_true_status($self->host->{id}, $self->service_id, $self->n_status)) {
+    if ($self->n_status ne "OK" &&
+        $self->dependency_is_in_true_status($self->host->{id}, $self->service_id, $self->n_status)
+    ) {
         $self->log->notice(
             "host id", $self->host->{id}, "or service id", $self->service_id, "has a",
             "dependency status that is true, skipping notification",
@@ -1382,13 +1401,19 @@ sub check_if_sms_contingent_is_low {
     my $company = $self->company;
 
     if ($host->{max_sms} > 0) {
-        if ($host->{sms_count} * 100 / $host->{max_sms} > 90 || $host->{max_sms} - $host->{sms_count} < 5) {
+        if (
+            $host->{sms_count} * 100 / $host->{max_sms} > 90 ||
+            $host->{max_sms} - $host->{sms_count} < 5
+        ) {
             return 1;
         }
     }
 
     if ($company->{max_sms} > 0) {
-        if ($company->{sms_count} * 100 / $company->{max_sms} > 90 || $company->{max_sms} - $company->{sms_count} < 5) {
+        if (
+            $company->{sms_count} * 100 / $company->{max_sms} > 90 ||
+            $company->{max_sms} - $company->{sms_count} < 5
+        ) {
             return 2;
         }
     }
@@ -1508,8 +1533,7 @@ sub check_if_downtime_is_active {
         status => "INFO",
         message => join(" ", $message, $self->n_service->{message}),
         attempt_counter => 1,
-        scheduled => 1,
-        last_check => $self->etime
+        scheduled => 1
     });
 
     if ($self->n_service->{status} eq "OK" && $self->c_service->{status_dependency_matched} > 0) {
@@ -1547,7 +1571,18 @@ sub check_srvchk_next_timeout {
     my $timeout = $self->c_service->{timeout} || $self->host->{timeout};
     my $last_check = $self->c_service->{last_check};
 
-    if ($self->whoami eq "srvchk" && $last_check + $interval + $timeout > $self->etime) {
+    if (
+        $self->whoami eq "srvchk" &&
+        ($self->c_service->{scheduled} || $last_check + $interval + $timeout > $self->etime)
+    ) {
+        if (
+            $self->c_service->{scheduled} &&
+            !$self->host_downtime &&
+            !$self->service_downtime->{$self->service_id}
+        ) {
+            $self->log->notice("delete scheduled flag for service", $self->service_id);
+            $self->update_service_status(scheduled => 0);
+        }
         my $next_timeout = $last_check + $interval + $timeout - $self->etime > 600
             ? $self->etime + 600
             : $last_check + $interval + $timeout;
@@ -1994,7 +2029,9 @@ sub update_host_status {
     my %update = (status => $status);
 
     if (!$self->{set_next_check}) {
-        $update{last_check} = $self->etime;
+        if ($self->set_host_last_check) {
+            $update{last_check} = $self->etime;
+        }
 
         if ($self->request->{agent_id} eq "localhost") {
             $update{facts} = $self->json->encode($self->request->{facts});

@@ -1,3 +1,7 @@
+bloonix-server (0.55) released at 2016-04-17
+
+    * Fixed some issues with scheduled services and srvchk.
+
 bloonix-server (0.54) released at 2016-04-08
 
     * Fixed last_check setting for checks that have a scheduled
