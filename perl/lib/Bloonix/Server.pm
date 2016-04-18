@@ -37,7 +37,7 @@ __PACKAGE__->mk_accessors(qw/
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.55";
+our $VERSION = "0.56";
 
 sub run {
     my $class = shift;
