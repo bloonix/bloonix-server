@@ -1585,7 +1585,7 @@ sub check_srvchk_next_timeout {
         }
         my $next_timeout = $last_check + $interval + $timeout - $self->etime > 600
             ? $self->etime + 600
-            : $last_check + $interval + $timeout;
+            : $self->etime + $interval + $timeout;
         $self->log->notice("refresh next_timeout to $next_timeout for service id", $self->service_id);
         $self->update_service_status(next_timeout => $next_timeout);
         return 1;

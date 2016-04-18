@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.55
+Version: 0.56
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Apr 18 2016 Jonny Schulz <js@bloonix.de> - 0.56-1
+- Fixed next_timeout setting.
 * Sun Apr 17 2016 Jonny Schulz <js@bloonix.de> - 0.55-1
 - Fixed some issues with scheduled services and srvchk.
 * Fri Apr 08 2016 Jonny Schulz <js@bloonix.de> - 0.54-1
