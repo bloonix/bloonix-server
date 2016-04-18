@@ -88,16 +88,20 @@ install:
 	./install-sh -c -m 0755 etc/init/bloonix-server.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-server.service;
 	./install-sh -c -m 0755 etc/init/bloonix-srvchk.service $(USRLIBDIR)/bloonix/etc/systemd/bloonix-srvchk.service;
 
-	if test "$(BUILDPKG)" = "0" ; then \
-		if test -e /bin/systemctl || test -e /usr/bin/systemctl ; then \
-			./install-sh -d -m 0755 $(DESTDIR)/usr/lib/systemd/system/; \
-			./install-sh -c -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
-			./install-sh -c -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
+	if [ "$(BUILDPKG)" = "0" ] ; then \
+		if [ -e /bin/systemctl ] || [ -e /usr/bin/systemctl ] ; then \
+			if [ -e /lib/systemd/system/ ] ; then \
+				install -m 0644 etc/init/bloonix-server.service $(DESTDIR)/lib/systemd/system/; \
+				install -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/lib/systemd/system/; \
+			elif [ -e /usr/lib/systemd/system/ ] ; then \
+				install -m 0644 etc/init/bloonix-server.service $(DESTDIR)/usr/lib/systemd/system/; \
+				install -m 0644 etc/init/bloonix-srvchk.service $(DESTDIR)/usr/lib/systemd/system/; \
+			fi; \
 			systemctl daemon-reload; \
-		elif test -d /etc/init.d ; then \
-			./install-sh -c -m 0755 etc/init/bloonix-server $(INITDIR)/bloonix-server; \
-			./install-sh -c -m 0755 etc/init/bloonix-srvchk $(INITDIR)/bloonix-srvchk; \
 		fi; \
+		install -d -m 0755 $(INITDIR); \
+		install -m 0755 etc/init/bloonix-server $(INITDIR)/; \
+		install -m 0755 etc/init/bloonix-srvchk $(INITDIR)/; \
 		set -e; cd perl; $(PERL) Build install; $(PERL) Build realclean; \
 	fi;
 

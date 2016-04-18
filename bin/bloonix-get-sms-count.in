@@ -80,7 +80,7 @@ if (@customer) {
 
 my $sth2 = $dbh->prepare(
     join(" ",
-        'select count(*)',
+        'select count(*) as count',
         'from notification',
         'inner join host on notification.host_id = host.id',
         'where host.company_id = ?',
