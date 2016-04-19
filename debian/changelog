@@ -1,3 +1,9 @@
+bloonix-server (0.57-1) unstable; urgency=low
+
+    * Fixed redirect mail notifications.
+
+ -- Jonny Schulz <js@bloonix.de>  Tue, 19 Apr 2016 21:36:37 +0200
+
 bloonix-server (0.56-1) unstable; urgency=low
 
     * Fixed next_timeout setting.

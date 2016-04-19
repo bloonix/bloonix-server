@@ -1,3 +1,7 @@
+bloonix-server (0.57) released at 2016-04-19
+
+    * Fixed redirect mail notifications.
+
 bloonix-server (0.56) released at 2016-04-18
 
     * Fixed next_timeout setting.

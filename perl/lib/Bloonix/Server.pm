@@ -37,7 +37,7 @@ __PACKAGE__->mk_accessors(qw/
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.56";
+our $VERSION = "0.57";
 
 sub run {
     my $class = shift;
@@ -2610,14 +2610,16 @@ sub send_mails {
             $mail_to = substr($mail_to, 0, 97) . "...";
         }
 
-        $self->db->create_send_mail(
-            $self->etime,
-            $host->{id},
-            $self->company->{id},
-            $mail_to,
-            $subject,
-            $message,
-        );
+        if (!$redirect) {
+            $self->db->create_send_mail(
+                $self->etime,
+                $host->{id},
+                $self->company->{id},
+                $mail_to,
+                $subject,
+                $message,
+            );
+        }
 
         foreach my $id (@id) {
             if ($id->{status} ne "OK") {
