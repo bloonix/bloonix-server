@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.57
+Version: 0.58
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,9 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Sun Apr 24 2016 Jonny Schulz <js@bloonix.de> - 0.58-1
+- Fixed service_name in mail notifications for overdue
+  service checks.
 * Tue Apr 19 2016 Jonny Schulz <js@bloonix.de> - 0.57-1
 - Fixed redirect mail notifications.
 * Mon Apr 18 2016 Jonny Schulz <js@bloonix.de> - 0.56-1

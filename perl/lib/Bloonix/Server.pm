@@ -1620,7 +1620,7 @@ sub check_if_srvchk_remote_error {
 
     $self->save_notification(
         service_id => $self->service_id,
-        service => $self->c_service->{service_name},
+        service_name => $self->c_service->{service_name},
         status => $self->n_service->{status},
         message_service => "mail",
         message => $self->n_service->{message},
