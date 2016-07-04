@@ -2468,7 +2468,7 @@ sub execute_command_to_send_sms {
         return undef;
     }
 
-    if (defined $response && (!defined $output || $output !~ /$response/)) {
+    if (defined $response && (!defined $output || $output !~ /$response/sm)) {
         $self->log->error("error send sms to $sms_to: $output");
         return undef;
     }
