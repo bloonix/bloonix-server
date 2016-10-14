@@ -37,7 +37,7 @@ __PACKAGE__->mk_accessors(qw/
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.58";
+our $VERSION = "0.59";
 
 sub run {
     my $class = shift;
@@ -1010,7 +1010,7 @@ sub save_notifications_by_contact {
         $self->log->info("check contact $contact->{name} ($contact->{id})");
 
         # Check if the contact has a valid timeperiod.
-        $self->log->info("check timeperiod for contact $contact->{name} ($contact->{id})");
+        $self->log->info("check timeperiod for contact $contact->{name} ($contact->{id}), escalation time", $contact->{escalation_time});
 
         if ($contact->{escalation_time} && $self->c_service->{status_nok_since} + $contact->{escalation_time} > $self->etime) {
             $self->log->info("contact $contact->{name} ($contact->{id}) has a higher escalation level");
@@ -2469,7 +2469,7 @@ sub execute_command_to_send_sms {
     }
 
     if (defined $response && (!defined $output || $output !~ /$response/sm)) {
-        $self->log->error("error send sms to $sms_to: $output");
+        $self->log->error("error send sms to $sms_to, string '$response' not found in output: $output");
         return undef;
     }
 

@@ -1,3 +1,10 @@
+bloonix-server (0.59-1) unstable; urgency=low
+
+    * Improved log message if a sms were not sent successfully.
+    * Improved logging and log the escalation time of a contact.
+
+ -- Jonny Schulz <js@bloonix.de>  Fri, 14 Oct 2016 20:46:39 +0200
+
 bloonix-server (0.58-1) unstable; urgency=low
 
     * Fixed service_name in mail notifications for overdue
