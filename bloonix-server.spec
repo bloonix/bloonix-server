@@ -1,6 +1,6 @@
 Summary: Bloonix server daemon
 Name: bloonix-server
-Version: 0.59
+Version: 0.60
 Release: 1%{dist}
 License: Commercial
 Group: Utilities/System
@@ -162,6 +162,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/Bloonix/Server/*.pm
 
 %changelog
+* Mon Jan 02 2017 Jonny Schulz <js@bloonix.de> - 0.60-1
+- Fixed: checking if max_sms is reached.
 * Fri Oct 14 2016 Jonny Schulz <js@bloonix.de> - 0.59-1
 - Improved log message if a sms were not sent successfully.
 - Improved logging and log the escalation time of a contact.

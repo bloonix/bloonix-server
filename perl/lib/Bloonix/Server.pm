@@ -37,7 +37,7 @@ __PACKAGE__->mk_accessors(qw/
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.59";
+our $VERSION = "0.60";
 
 sub run {
     my $class = shift;
@@ -2324,6 +2324,7 @@ sub send_sms {
     }
 
     foreach my $sms_to (keys %{ $self->{notifications}->{sms} }) {
+        last if $self->check_inner_if_max_sms_reached;
         my ($service_ids, $message) = $self->gen_sms_message($sms_to);
 
         if ($self->send_sms_to_provider($sms_to, URI::Escape::uri_escape($message))) {
@@ -2355,11 +2356,6 @@ sub send_sms {
                     Data => $message,
                 )->send("sendmail", "$mail->{sendmail}");
             }
-
-            # Check here the sms_count again because if more than
-            # one contact is configured then the sms counter
-            # increases with each sms that is send.
-            last if $self->check_inner_if_max_sms_reached;
         }
     }
 

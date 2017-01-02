@@ -1,3 +1,9 @@
+bloonix-server (0.60-1) unstable; urgency=low
+
+    * Fixed: checking if max_sms is reached.
+
+ -- Jonny Schulz <js@bloonix.de>  Mon, 02 Jan 2017 12:57:17 +0100
+
 bloonix-server (0.59-1) unstable; urgency=low
 
     * Improved log message if a sms were not sent successfully.
