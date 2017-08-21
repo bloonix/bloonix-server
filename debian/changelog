@@ -1,3 +1,9 @@
+bloonix-server (0.61-1) unstable; urgency=low
+
+    * Bloonix Server is now ready for Elasticsearch 5.x.
+
+ -- Jonny Schulz <js@bloonix.de>  Mon, 21 Aug 2017 20:11:00 +0200
+
 bloonix-server (0.60-1) unstable; urgency=low
 
     * Fixed: checking if max_sms is reached.
