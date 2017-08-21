@@ -1,3 +1,7 @@
+bloonix-server (0.61) released at 2017-08-21
+
+    * Bloonix Server is now ready for Elasticsearch 5.x.
+
 bloonix-server (0.60) released at 2017-01-02
 
     * Fixed: checking if max_sms is reached.

@@ -37,7 +37,7 @@ __PACKAGE__->mk_accessors(qw/
 __PACKAGE__->mk_array_accessors(qw/event_tags/);
 __PACKAGE__->mk_hash_accessors(qw/stat_by_prio attempt_max_reached/);
 
-our $VERSION = "0.60";
+our $VERSION = "0.61";
 
 sub run {
     my $class = shift;
@@ -70,6 +70,7 @@ sub init {
     $self->stat_by_prio->set(qw(OK 0 INFO 5 WARNING 10 CRITICAL 20 UNKNOWN 30));
     $self->rest(Bloonix::REST->new($self->config->{elasticsearch}));
     $self->rest->utf8(1);
+    $self->get_es_version;
     $self->db(Bloonix::Server::Database->new($self->config->{database}));
     $self->tlog(Log::Handler::Output::File->new($self->config->{elasticsearch_roll_forward}));
     $self->json(JSON->new);
@@ -1103,7 +1104,7 @@ sub check_if_service_has_a_active_dependency {
     my $self = shift;
 
     # service_has_active_dependency
-    #   0 = not checkec
+    #   0 = not checked
     #   1 = no
     #   2 = yes
 
@@ -1886,7 +1887,11 @@ sub dependency_is_in_true_status {
 
         # check inheritation
         if ($dep->{inherit} && $counter > 0) {
-            if ($self->dependency_is_in_true_status($on_host_id, $on_service_id, $service_status, $counter)) {
+            if (
+                $self->dependency_is_in_true_status(
+                    $on_host_id, $on_service_id, $service_status, $counter
+                )
+            ) {
                 $self->log->info($ws, "inherited dependency matched");
                 return 1;
             } else {
@@ -2647,6 +2652,7 @@ sub update_last_notification {
 sub get_service_flaps_by_time {
     my ($self, $host_id, $service_id, $from_time, $to_time) = @_;
 
+    my @query;
     my @indices = $self->get_indices($from_time, $to_time);
     my $index = join(",", @indices);
 
@@ -2658,18 +2664,35 @@ sub get_service_flaps_by_time {
     $from_time .= "000";
     $to_time .= "000";
 
-    my @query = (
-        path => "/$index/event/_search?routing=$host_id",
-        data => {
-            filter => {
-                and => [
-                    { term => { service_id => $service_id } },
-                    { range => { time => { from => $from_time, to => $to_time } } }
-                ]
-            },
-            size => 200
-        }
-    );
+    if ($self->{es_version} == 2) {
+        @query = (
+            path => "/$index/event/_search?routing=$host_id",
+            data => {
+                filter => {
+                    and => [
+                        { term => { service_id => $service_id } },
+                        { range => { time => { from => $from_time, to => $to_time } } }
+                    ]
+                },
+                size => 200
+            }
+        );
+    } elsif ($self->{es_version} == 5) {
+        @query = (
+            path => "/$index/event/_search?routing=$host_id",
+            data => {
+                query => {
+                    bool => {
+                        filter => [
+                            { term => { service_id => $service_id } },
+                            { range => { time => { from => $from_time, to => $to_time } } }
+                        ]
+                    }
+                },
+                size => 200
+            }
+        );
+    }
 
     my $count = 0;
     my $result = $self->rest->get(@query);
@@ -2684,6 +2707,16 @@ sub get_service_flaps_by_time {
     }
 
     return $count;
+}
+
+sub get_es_version {
+    my $self = shift;
+
+    my $es_version = $self->rest->get("/")->{version}->{number};
+
+    if ($es_version =~ /^(\d)/) {
+        $self->{es_version} = $1;
+    }
 }
 
 sub get_indices {
