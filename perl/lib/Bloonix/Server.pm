@@ -2509,7 +2509,7 @@ sub send_mails {
         my (%status, $status, $redirect, @id);
 
         my $message = "*** Status for host $host->{hostname} ($host->{ipaddr}) at ". $self->stime ." ***\n\n";
-        $message .= "https://$hostname/#monitoring/hosts/$host->{id}\n";
+        $message .= "\nhttps://$hostname/#monitoring/hosts/$host->{id}\n\n";
 
         $subject =~ s/%a/$host->{ipaddr}/;
         $subject =~ s/%h/$host->{hostname}/;
